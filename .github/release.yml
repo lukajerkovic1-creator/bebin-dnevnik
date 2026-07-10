@@ -1,0 +1,8 @@
+changelog:
+  categories:
+    - title: Nove funkcionalnosti
+      labels: [enhancement]
+    - title: Ispravci
+      labels: [bug]
+    - title: Ostale promjene
+      labels: ['*']

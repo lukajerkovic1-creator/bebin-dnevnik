@@ -1,0 +1,30 @@
+complexity:
+  LongMethod:
+    # Compose zasloni su deklarativni i prirodno dulji; složenost i dalje ostaje ograničena.
+    threshold: 180
+  LongParameterList:
+    functionThreshold: 10
+  CyclomaticComplexMethod:
+    threshold: 25
+  ComplexCondition:
+    threshold: 5
+  TooManyFunctions:
+    thresholdInFiles: 30
+    thresholdInClasses: 30
+    thresholdInInterfaces: 30
+style:
+  MagicNumber:
+    active: false
+  MaxLineLength:
+    maxLineLength: 280
+  ReturnCount:
+    max: 5
+  ThrowsCount:
+    max: 10
+exceptions:
+  # Granice kriptografije, platforme i UI-ja moraju prevesti sve neočekivane kvarove u sigurnu korisničku poruku.
+  TooGenericExceptionCaught:
+    active: false
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']

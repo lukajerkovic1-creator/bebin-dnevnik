@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.BebinDnevnik" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@color/cream</item>
+        <item name="android:navigationBarColor">@color/cream</item>
+    </style>
+</resources>

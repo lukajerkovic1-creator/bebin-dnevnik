@@ -1,0 +1,87 @@
+name: Potpisani release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-37' 'build-tools;37.0.0' 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :app:formatCheck :app:detekt :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+
+  instrumentation-api29:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-37' 'build-tools;37.0.0' 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          target: default
+          arch: x86_64
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest
+
+  publish:
+    needs: [verify, instrumentation-api29]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-37' 'build-tools;37.0.0' 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Provjeri release tajne
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo 'Nedostaje ANDROID_KEYSTORE_BASE64'; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo 'Nedostaje ANDROID_KEYSTORE_PASSWORD'; exit 1; }
+          test -n "$KEY_ALIAS" || { echo 'Nedostaje ANDROID_KEY_ALIAS'; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo 'Nedostaje ANDROID_KEY_PASSWORD'; exit 1; }
+      - name: Pripremi keystore bez ispisa tajni
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+          {
+            echo 'storeFile=release.keystore'
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > keystore.properties
+      - name: Izgradi i provjeri potpisani APK
+        run: |
+          ./gradlew :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk BebinDnevnik.apk
+          apksigner verify --verbose BebinDnevnik.apk
+          sha256sum BebinDnevnik.apk > BebinDnevnik.apk.sha256
+      - name: Objavi GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" BebinDnevnik.apk BebinDnevnik.apk.sha256 --verify-tag --generate-notes
+      - name: Ukloni privremene tajne
+        if: always()
+        run: rm -f release.keystore keystore.properties

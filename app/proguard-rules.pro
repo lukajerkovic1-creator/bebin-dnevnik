@@ -1,0 +1,4 @@
+-keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Entity class * { *; }
+-keep class net.zetetic.database.** { *; }
+-keep class org.json.** { *; }

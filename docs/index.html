@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="hr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#a5005a">
+  <title>Bebin dnevnik</title>
+  <style>
+    :root{color-scheme:light dark;font-family:Inter,system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 50% 10%,#ffd8e8,transparent 45%),#fff8fa;color:#32101f}.card{width:min(92vw,680px);padding:clamp(2rem,7vw,5rem);text-align:center;border-radius:2rem;background:rgba(255,255,255,.82);box-shadow:0 24px 70px #5a003022;border:1px solid #a5005a22}h1{font-size:clamp(2.3rem,8vw,4.6rem);margin:0 0 1rem;color:#870049;letter-spacing:-.04em}p{font-size:1.15rem;line-height:1.6;margin:0 auto 2rem;max-width:36rem}.button{display:inline-flex;min-height:56px;align-items:center;justify-content:center;padding:.9rem 1.5rem;border-radius:999px;background:#a5005a;color:#fff;text-decoration:none;font-weight:750;font-size:1.05rem;box-shadow:0 10px 30px #a5005a44}.button:focus-visible{outline:4px solid #ffafd0;outline-offset:4px}.mark{width:78px;height:78px;margin:0 auto 1.5rem;border-radius:24px;background:#5a0030;display:grid;place-items:center;color:#fff;font-size:2.4rem}@media(prefers-color-scheme:dark){body{background:radial-gradient(circle at 50% 10%,#620035,transparent 45%),#191114;color:#fff0f4}.card{background:#24181ddd;border-color:#ffafd033}h1{color:#ffafd0}.button{background:#ffafd0;color:#620035}}</style>
+</head>
+<body>
+  <main class="card">
+    <div class="mark" aria-hidden="true">✓</div>
+    <h1>Bebin dnevnik</h1>
+    <p>Privatna Android evidencija obroka, dnevnih aktivnosti i tummy timea. Radi potpuno bez interneta.</p>
+    <a class="button" id="download" href="#">Preuzmi Android aplikaciju</a>
+  </main>
+  <script>
+    const owner = location.hostname.endsWith('.github.io') ? location.hostname.split('.')[0] : '';
+    document.querySelector('#download').href = owner ? `https://github.com/${owner}/bebin-dnevnik/releases/latest/download/BebinDnevnik.apk` : '../releases/latest/download/BebinDnevnik.apk';
+  </script>
+</body>
+</html>
