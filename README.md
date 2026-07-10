@@ -100,7 +100,7 @@ Push oznake `v*`, primjerice `git tag v1.0.0 && git push origin v1.0.0`, pokreć
 
 ## GitHub Pages
 
-Workflow `pages.yml` automatski objavljuje responzivnu stranicu iz mape `docs`. Na prvoj upotrebi u **Settings → Pages → Source** odaberite **GitHub Actions**. Predviđeni URL je `https://OWNER.github.io/bebin-dnevnik/`. Gumb na stranici vlasnika određuje iz domene i vodi na najnoviji `BebinDnevnik.apk` release asset.
+Workflow `pages.yml` automatski objavljuje responzivnu stranicu iz mape `docs`. Na prvoj upotrebi u **Settings → Pages → Source** odaberite **GitHub Actions**. Predviđeni URL je `https://OWNER.github.io/bebin-dnevnik/`. Prije prvog potpisanog izdanja gumb vodi na posljednji uspješni CI i debug APK artefakt; nakon objave automatski vodi izravno na najnoviji `BebinDnevnik.apk` release asset.
 
 ## Licenca
 
