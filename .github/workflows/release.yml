@@ -34,13 +34,18 @@ jobs:
           cmdline-tools-version: 14742923
           packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Omogući hardversko ubrzanje emulatora
+        run: sudo chmod 666 /dev/kvm
       - uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 29
           target: default
           arch: x86_64
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest
+          script: |
+            adb wait-for-device
+            timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ] && [ "$(adb shell getprop ro.build.version.sdk | tr -d "\r")" = "29" ] && adb shell cmd package list packages >/dev/null 2>&1; do sleep 5; done'
+            ./gradlew :app:connectedDebugAndroidTest
 
   publish:
     needs: [verify, instrumentation-api29]
