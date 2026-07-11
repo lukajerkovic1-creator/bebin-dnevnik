@@ -94,7 +94,7 @@ jobs:
         run: |
           ./gradlew :app:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk BebinDnevnik.apk
-          apksigner verify --verbose BebinDnevnik.apk
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose BebinDnevnik.apk
           sha256sum BebinDnevnik.apk > BebinDnevnik.apk.sha256
       - name: Objavi GitHub Release
         env:
