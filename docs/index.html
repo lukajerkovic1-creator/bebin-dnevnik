@@ -12,9 +12,9 @@
   <main class="card">
     <div class="mark" aria-hidden="true">✓</div>
     <h1>Bebin dnevnik</h1>
-    <p>Privatna Android evidencija obroka, dnevnih aktivnosti i tummy timea. Radi potpuno bez interneta.</p>
-    <a class="button" id="download" href="https://github.com/lukajerkovic1-creator/bebin-dnevnik/actions/workflows/ci.yml?query=branch%3Amain+is%3Asuccess">Preuzmi testni APK</a>
-    <p class="note" id="download-note">Debug APK nalazi se u artefaktu posljednjeg uspješnog CI izvršavanja.</p>
+    <p>Privatna Android evidencija obroka, dnevnih aktivnosti i tummy timea. Podaci ostaju lokalno na uređaju.</p>
+    <a class="button" id="download" href="./download/">Preuzmi najnoviju verziju</a>
+    <p class="note" id="download-note">Uvijek preuzima najnoviji potpisani APK s GitHub Releasesa.</p>
   </main>
   <script>
     const owner = location.hostname.endsWith('.github.io') ? location.hostname.split('.')[0] : 'lukajerkovic1-creator';
@@ -27,7 +27,7 @@
       .then(release => {
         const apk = release?.assets?.find(asset => asset.name === 'BebinDnevnik.apk');
         if (apk) {
-          download.href = apk.browser_download_url;
+          download.href = './download/';
           download.textContent = 'Preuzmi potpisani APK';
           note.textContent = `Izdanje ${release.tag_name}. SHA-256 datoteka dostupna je na stranici izdanja.`;
         }

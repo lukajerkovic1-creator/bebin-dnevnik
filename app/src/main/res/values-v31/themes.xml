@@ -4,7 +4,7 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:statusBarColor">@color/cream</item>
         <item name="android:navigationBarColor">@color/cream</item>
-        <item name="android:windowSplashScreenBackground">@color/fuchsia_dark</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_journal</item>
+        <item name="android:windowSplashScreenBackground">@color/cream</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_baby_bottle</item>
     </style>
 </resources>

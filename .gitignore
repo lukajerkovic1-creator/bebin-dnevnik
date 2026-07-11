@@ -11,3 +11,5 @@ captures/
 *.keystore
 keystore.properties
 release.keystore
+app/release/
+gradle/gradle-daemon-jvm.properties

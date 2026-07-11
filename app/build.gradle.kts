@@ -8,6 +8,8 @@ plugins {
 
 val ktlintCli = configurations.create("ktlintCli")
 val detektCli = configurations.create("detektCli")
+val automatedVersionCode = providers.environmentVariable("RELEASE_VERSION_CODE").orNull?.toIntOrNull()
+val automatedVersionName = providers.environmentVariable("RELEASE_VERSION_NAME").orNull?.removePrefix("v")
 
 android {
     namespace = "hr.bebindnevnik.app"
@@ -17,8 +19,8 @@ android {
         applicationId = "hr.bebindnevnik.app"
         minSdk = 29
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = automatedVersionCode ?: 2
+        versionName = automatedVersionName ?: "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

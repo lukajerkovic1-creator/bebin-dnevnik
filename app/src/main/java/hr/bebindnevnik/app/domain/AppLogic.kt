@@ -24,7 +24,7 @@ object AppLogic {
         editedId: Long = 0,
     ): Set<EntryWarning> {
         require(amountMl >= 0) { "Količina ne smije biti negativna." }
-        require(!LocalDateTime.of(date, time).isAfter(LocalDateTime.now())) { "Datum i vrijeme ne smiju biti u budućnosti." }
+        EntryDateTimeRules.requireValid(date, time)
         return buildSet {
             if (amountMl == 0) add(EntryWarning.ZERO_ML)
             if (amountMl > 500) add(EntryWarning.OVER_500_ML)
@@ -40,7 +40,7 @@ object AppLogic {
         time: LocalTime,
     ): Set<EntryWarning> {
         require(seconds >= 0) { "Trajanje ne smije biti negativno." }
-        require(!LocalDateTime.of(date, time).isAfter(LocalDateTime.now())) { "Datum i vrijeme ne smiju biti u budućnosti." }
+        EntryDateTimeRules.requireValid(date, time)
         return buildSet {
             if (seconds < 5) add(EntryWarning.UNDER_5_SECONDS)
             if (seconds > 3_600) add(EntryWarning.OVER_60_MINUTES)

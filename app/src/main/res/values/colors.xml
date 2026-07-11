@@ -1,4 +1,4 @@
 <resources>
-    <color name="fuchsia_dark">#5A0030</color>
-    <color name="cream">#FFF7FA</color>
+    <color name="cream">#FFF9F5</color>
+    <color name="icon_background">#FFE3EE</color>
 </resources>

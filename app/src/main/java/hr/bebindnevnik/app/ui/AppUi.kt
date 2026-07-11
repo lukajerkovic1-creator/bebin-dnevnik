@@ -3,7 +3,6 @@
 package hr.bebindnevnik.app.ui
 
 import android.Manifest
-import android.app.TimePickerDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -12,6 +11,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,15 +35,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -82,7 +80,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -91,6 +88,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -108,9 +106,11 @@ import hr.bebindnevnik.app.data.MealEntity
 import hr.bebindnevnik.app.data.TernaryStatus
 import hr.bebindnevnik.app.data.TummySessionEntity
 import hr.bebindnevnik.app.domain.AppLogic
-import hr.bebindnevnik.app.domain.EntryWarning
 import hr.bebindnevnik.app.domain.StatisticsRange
 import hr.bebindnevnik.app.notifications.NotificationHelper
+import hr.bebindnevnik.app.update.AppUpdate
+import hr.bebindnevnik.app.update.UpdateCheckResult
+import hr.bebindnevnik.app.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -122,15 +122,15 @@ import java.time.YearMonth
 private data class NavItem(
     val route: String,
     val label: String,
-    val icon: ImageVector,
+    val icon: BabyNavKind,
 )
 
 private val navItems =
     listOf(
-        NavItem("today", "Danas", Icons.Default.Home),
-        NavItem("calendar", "Kalendar", Icons.Default.CalendarMonth),
-        NavItem("statistics", "Statistika", Icons.Default.BarChart),
-        NavItem("settings", "Postavke", Icons.Default.Settings),
+        NavItem("today", "Danas", BabyNavKind.TODAY),
+        NavItem("calendar", "Kalendar", BabyNavKind.CALENDAR),
+        NavItem("statistics", "Statistika", BabyNavKind.STATISTICS),
+        NavItem("settings", "Postavke", BabyNavKind.SETTINGS),
     )
 
 @Composable
@@ -199,7 +199,18 @@ fun BebinDnevnikApp(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = { CenterAlignedTopAppBar(title = { Text("Bebin dnevnik") }) },
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        BabyIllustration(BabyIllustrationKind.JOURNAL, Modifier.size(38.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Bebin dnevnik", fontWeight = FontWeight.Bold)
+                    }
+                },
+            )
+        },
         bottomBar = {
             NavigationBar {
                 navItems.forEach { item ->
@@ -212,7 +223,13 @@ fun BebinDnevnikApp(
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(item.icon, contentDescription = item.label) },
+                        icon = {
+                            BabyNavIcon(
+                                kind = item.icon,
+                                selected = backStack?.destination?.route == item.route,
+                                label = item.label,
+                            )
+                        },
                         label = { Text(item.label) },
                     )
                 }
@@ -243,7 +260,7 @@ private fun Onboarding(onFinish: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(72.dp), tint = MaterialTheme.colorScheme.primary)
+        BabyIllustration(BabyIllustrationKind.JOURNAL, Modifier.size(104.dp).align(Alignment.CenterHorizontally))
         Spacer(Modifier.height(20.dp))
         Text("Dobro došli u Bebin dnevnik", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(20.dp))
@@ -283,25 +300,19 @@ private fun TodayScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text(
-                        if (isToday) "Danas" else state.selectedDate.hrDate(),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (!isToday) TextButton(onClick = { viewModel.selectDate(LocalDate.now()) }) { Text("Vrati se na danas") }
-                }
-                StatusBadge(state.summary.status)
-            }
+            DaySelectorHeader(
+                selectedDate = state.selectedDate,
+                status = state.summary.status,
+                onDateSelected = viewModel::selectDate,
+            )
         }
         if (!notifications.notificationsAllowed()) item { NotificationWarning(openSettings) }
         item {
             HighlightCard("obrok" in highlight) {
-                SectionTitle("Posljednji obrok")
+                IllustratedSectionTitle("Posljednji obrok", BabyIllustrationKind.BOTTLE)
                 val last = state.selectedMeals.maxByOrNull { it.time }
                 if (last == null) {
-                    Text("Nije evidentirano")
+                    Text("Još nije evidentiran nijedan obrok.")
                 } else {
                     Text("${last.time.hrStoredTime()} · ${last.amountMl} ml", style = MaterialTheme.typography.headlineSmall)
                     Text(AppLogic.elapsedText(LocalDate.parse(last.date), LocalTime.parse(last.time)))
@@ -310,7 +321,7 @@ private fun TodayScreen(
         }
         item {
             HighlightCard("obrok" in highlight) {
-                SectionTitle("Dodavanje obroka")
+                IllustratedSectionTitle("Novi obrok", BabyIllustrationKind.BOTTLE)
                 Button(onClick = { newMeal = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -321,14 +332,35 @@ private fun TodayScreen(
                 }
             }
         }
-        item { StatusCard("Waya kapi", "Waya kapi" in highlight, state.summary.waya, viewModel::setWaya) }
-        item { StatusCard("Vježbanje", "vježbanje" in highlight, state.summary.exercise, viewModel::setExercise) }
+        item {
+            StatusCard(
+                "Waya kapi",
+                BabyIllustrationKind.DROPS,
+                "Waya kapi" in highlight,
+                state.summary.waya,
+                viewModel::setWaya,
+            )
+        }
+        item {
+            StatusCard(
+                "Vježbanje",
+                BabyIllustrationKind.EXERCISE,
+                "vježbanje" in highlight,
+                state.summary.exercise,
+                viewModel::setExercise,
+            )
+        }
         item {
             HighlightCard("tummy time" in highlight, Modifier.testTag("tummy-card")) {
-                SectionTitle("Tummy time")
+                IllustratedSectionTitle("Tummy time", BabyIllustrationKind.TUMMY)
                 Text("Ukupno danas: ${state.summary.tummySeconds.durationText()} · ${state.summary.tummyCount} sesija")
                 if (isToday) {
-                    Text(timer.elapsedSeconds.durationText(), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        timer.elapsedSeconds.durationText(),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
                     if (timer.running) {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Button(onClick = viewModel::stopTimer, modifier = Modifier.weight(1f).height(56.dp).testTag("timer-stop")) {
@@ -372,18 +404,30 @@ private fun TodayScreen(
     if (newMeal ||
         mealDialog != null
     ) {
-        MealEditor(mealDialog, state.selectedDate, viewModel, onClose = {
-            newMeal = false
-            mealDialog = null
-        })
+        MealEditorSheet(
+            item = mealDialog,
+            defaultDate = state.selectedDate,
+            onWarnings = viewModel::mealWarnings,
+            onSave = viewModel::saveMeal,
+            onClose = {
+                newMeal = false
+                mealDialog = null
+            },
+        )
     }
     if (newTummy ||
         tummyDialog != null
     ) {
-        TummyEditor(tummyDialog, state.selectedDate, viewModel, onClose = {
-            newTummy = false
-            tummyDialog = null
-        })
+        TummyEditorSheet(
+            item = tummyDialog,
+            defaultDate = state.selectedDate,
+            onWarnings = viewModel::tummyWarnings,
+            onSave = viewModel::saveTummy,
+            onClose = {
+                newTummy = false
+                tummyDialog = null
+            },
+        )
     }
     deleteMeal?.let { item ->
         ConfirmDelete("Obrisati ovaj obrok?", {
@@ -426,21 +470,49 @@ private fun HighlightCard(
         if (highlighted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         label = "isticanje",
     )
-    Card(colors = CardDefaults.cardColors(containerColor = color), modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+    Card(
+        colors = CardDefaults.cardColors(containerColor = color),
+        shape = RoundedCornerShape(BabyDimensions.CardCorner),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            Modifier.padding(BabyDimensions.CardPadding),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
     }
 }
 
-@Composable private fun SectionTitle(text: String) = Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+@Composable
+private fun SectionTitle(text: String) = Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+@Composable
+private fun IllustratedSectionTitle(
+    text: String,
+    illustration: BabyIllustrationKind,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SectionTitle(text)
+        Spacer(Modifier.weight(1f))
+        BabyIllustration(illustration, Modifier.size(BabyDimensions.IllustrationSmall))
+    }
+}
 
 @Composable
 private fun StatusCard(
     title: String,
+    illustration: BabyIllustrationKind,
     highlighted: Boolean,
     status: TernaryStatus,
     set: (TernaryStatus) -> Unit,
 ) = HighlightCard(highlighted) {
-    SectionTitle(title)
+    IllustratedSectionTitle(title, illustration)
     Text("Trenutačno: ${status.label()}")
     val unset = TernaryStatus.NIJE_EVIDENTIRANO
     FilterChip(
@@ -481,9 +553,14 @@ private fun EntryRow(
 
 @Composable
 private fun SummaryCard(summary: DaySummary) =
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            SectionTitle("Dnevni sažetak")
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(BabyDimensions.CardCorner),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = .55f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(Modifier.padding(BabyDimensions.CardPadding), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            IllustratedSectionTitle("Dnevni sažetak", BabyIllustrationKind.JOURNAL)
             Text("Ukupno: ${summary.totalMl} ml")
             Text("Broj obroka: ${summary.mealCount}")
             Text("Prosječno: ${"%.1f".format(summary.averageMl)} ml")
@@ -496,7 +573,7 @@ private fun SummaryCard(summary: DaySummary) =
     }
 
 @Composable
-private fun StatusBadge(status: DayStatus) {
+internal fun StatusBadge(status: DayStatus) {
     val color =
         when (status) {
             DayStatus.POTPUNO -> Color(0xFF2E7D32)
@@ -539,152 +616,6 @@ private fun NotificationWarning(openSettingsScreen: () -> Unit) =
         }
     }
 
-@Composable
-private fun MealEditor(
-    item: MealEntity?,
-    selectedDate: LocalDate,
-    viewModel: MainViewModel,
-    onClose: () -> Unit,
-) {
-    var amount by remember { mutableStateOf(item?.amountMl?.toString().orEmpty()) }
-    var dateText by remember { mutableStateOf((item?.date?.let(LocalDate::parse) ?: selectedDate).hrDate()) }
-    var timeText by remember { mutableStateOf((item?.time?.let(LocalTime::parse) ?: LocalTime.now()).hrTime()) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var warnings by remember { mutableStateOf<Set<EntryWarning>>(emptySet()) }
-
-    fun attemptSave(confirmed: Boolean = false) {
-        try {
-            val parsedAmount = amount.toInt()
-            val date = LocalDate.parse(dateText, CroatianDateFormatter)
-            val time = LocalTime.parse(timeText, CroatianTimeFormatter)
-            val found = viewModel.mealWarnings(parsedAmount, date, time, item?.id ?: 0)
-            if (found.isNotEmpty() &&
-                !confirmed
-            ) {
-                warnings = found
-            } else {
-                viewModel.saveMeal(item?.id ?: 0, date, time, parsedAmount)
-                onClose()
-            }
-        } catch (e: Exception) {
-            error = e.message ?: "Provjerite datum, vrijeme i količinu."
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(if (item == null) "Novi obrok" else "Uredi obrok") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(40, 80, 120, 160).forEach { ml ->
-                        AssistChip(onClick = {
-                            amount =
-                                ml.toString()
-                        }, label = { Text("$ml ml") })
-                    }
-                }
-                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Količina (ml)") }, singleLine = true)
-                OutlinedTextField(dateText, { dateText = it }, label = { Text("Datum (dd.MM.yyyy.)") }, singleLine = true)
-                OutlinedTextField(timeText, { timeText = it }, label = { Text("Vrijeme (HH:mm)") }, singleLine = true)
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = { Button(onClick = { attemptSave() }) { Text("Spremi") } },
-        dismissButton = { TextButton(onClick = onClose) { Text("Odustani") } },
-    )
-    if (warnings.isNotEmpty()) {
-        WarningDialog(warnings.joinToString("\n") { warningLabel(it) }, { attemptSave(true) }, {
-            warnings =
-                emptySet()
-        })
-    }
-}
-
-@Composable
-private fun TummyEditor(
-    item: TummySessionEntity?,
-    selectedDate: LocalDate,
-    viewModel: MainViewModel,
-    onClose: () -> Unit,
-) {
-    var minutes by remember { mutableStateOf(((item?.durationSeconds ?: 0) / 60).toString()) }
-    var seconds by remember { mutableStateOf(((item?.durationSeconds ?: 0) % 60).toString()) }
-    var dateText by remember { mutableStateOf((item?.date?.let(LocalDate::parse) ?: selectedDate).hrDate()) }
-    var timeText by remember { mutableStateOf((item?.time?.let(LocalTime::parse) ?: LocalTime.now()).hrTime()) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var warnings by remember { mutableStateOf<Set<EntryWarning>>(emptySet()) }
-
-    fun attemptSave(confirmed: Boolean = false) {
-        try {
-            val duration = minutes.toLong() * 60 + seconds.toLong()
-            val date = LocalDate.parse(dateText, CroatianDateFormatter)
-            val time = LocalTime.parse(timeText, CroatianTimeFormatter)
-            val found = viewModel.tummyWarnings(duration, date, time)
-            if (found.isNotEmpty() &&
-                !confirmed
-            ) {
-                warnings = found
-            } else {
-                viewModel.saveTummy(item?.id ?: 0, date, time, duration)
-                onClose()
-            }
-        } catch (e: Exception) {
-            error = e.message ?: "Provjerite unesene vrijednosti."
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(if (item == null) "Ručni unos tummy timea" else "Uredi tummy time") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(minutes, {
-                        minutes = it.filter(Char::isDigit)
-                    }, label = { Text("Minute") }, modifier = Modifier.weight(1f), singleLine = true)
-                    OutlinedTextField(seconds, {
-                        seconds = it.filter(Char::isDigit)
-                    }, label = { Text("Sekunde") }, modifier = Modifier.weight(1f), singleLine = true)
-                }
-                OutlinedTextField(dateText, { dateText = it }, label = { Text("Datum (dd.MM.yyyy.)") }, singleLine = true)
-                OutlinedTextField(timeText, { timeText = it }, label = { Text("Vrijeme (HH:mm)") }, singleLine = true)
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = { Button(onClick = { attemptSave() }) { Text("Spremi") } },
-        dismissButton = { TextButton(onClick = onClose) { Text("Odustani") } },
-    )
-    if (warnings.isNotEmpty()) {
-        WarningDialog(warnings.joinToString("\n") { warningLabel(it) }, { attemptSave(true) }, {
-            warnings =
-                emptySet()
-        })
-    }
-}
-
-@Composable private fun WarningDialog(
-    text: String,
-    confirm: () -> Unit,
-    dismiss: () -> Unit,
-) = AlertDialog(
-    onDismissRequest = dismiss,
-    icon = { Icon(Icons.Default.Warning, null) },
-    title = { Text("Potrebna je potvrda") },
-    text = { Text(text) },
-    confirmButton = {
-        Button(onClick = confirm) { Text("Ipak spremi") }
-    },
-    dismissButton = { TextButton(onClick = dismiss) { Text("Ispravi unos") } },
-)
-
-private fun warningLabel(warning: EntryWarning) =
-    when (warning) {
-        EntryWarning.ZERO_ML -> "Količina je 0 ml."
-        EntryWarning.OVER_500_ML -> "Količina je veća od 500 ml."
-        EntryWarning.DUPLICATE_TIME -> "Već postoji obrok s potpuno jednakim datumom i vremenom."
-        EntryWarning.UNDER_5_SECONDS -> "Sesija je kraća od 5 sekundi."
-        EntryWarning.OVER_60_MINUTES -> "Sesija je dulja od 60 minuta."
-    }
-
 @Composable private fun ConfirmDelete(
     title: String,
     confirm: () -> Unit,
@@ -706,6 +637,16 @@ private fun CalendarScreen(
     var month by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     val shown = YearMonth.parse(month)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                SectionTitle("Kalendar")
+                Text("Nježan pregled bebinih dana", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            BabyIllustration(BabyIllustrationKind.JOURNAL, Modifier.size(BabyDimensions.IllustrationSmall))
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { month = shown.minusMonths(1).toString() }) { Text("‹ Prethodni") }
             Text(
@@ -742,7 +683,7 @@ private fun CalendarScreen(
                                 DayStatus.BEZ_PODATAKA -> "—"
                             }
                         OutlinedCard(
-                            Modifier.weight(1f).height(64.dp).padding(2.dp).clickable(enabled = !disabled) {
+                            Modifier.weight(1f).heightIn(min = 64.dp).padding(2.dp).clickable(enabled = !disabled) {
                                 viewModel.selectDate(date)
                                 select(date)
                             },
@@ -760,7 +701,16 @@ private fun CalendarScreen(
                         ) {
                             Column(Modifier.fillMaxSize().padding(5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(date.dayOfMonth.toString())
-                                Text(symbol, fontWeight = FontWeight.Bold)
+                                Text(
+                                    symbol,
+                                    fontWeight = FontWeight.Bold,
+                                    color =
+                                        when (summary.status) {
+                                            DayStatus.POTPUNO -> Color(0xFF2E7D32)
+                                            DayStatus.DJELOMICNO -> MaterialTheme.colorScheme.primary
+                                            DayStatus.BEZ_PODATAKA -> MaterialTheme.colorScheme.outline
+                                        },
+                                )
                             }
                         }
                     }
@@ -800,7 +750,13 @@ private fun StatisticsScreen(state: UiState) {
     val start = LocalDate.parse(summaries.first().date)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            SectionTitle("Statistika")
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    SectionTitle("Statistika")
+                    Text("Pregled malih, važnih trenutaka", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                BabyIllustration(BabyIllustrationKind.BOTTLE, Modifier.size(BabyDimensions.IllustrationSmall))
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 StatsPeriod.entries.forEach { value ->
                     FilterChip(period == value, { period = value }, {
@@ -820,8 +776,14 @@ private fun StatisticsScreen(state: UiState) {
             val mealCount = summaries.sumOf { it.mealCount }
             val tummy = summaries.sumOf { it.tummySeconds }
             val complete = summaries.count { it.status == DayStatus.POTPUNO }
-            OutlinedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(BabyDimensions.CardCorner),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Column(Modifier.padding(BabyDimensions.CardPadding), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    IllustratedSectionTitle("Sažetak razdoblja", BabyIllustrationKind.JOURNAL)
                     Text("Razdoblje: ${start.hrDate()} – ${today.hrDate()}")
                     Text("Ukupno ml: $totalMl ml")
                     Text("Broj obroka: $mealCount")
@@ -880,7 +842,17 @@ private fun BarChart(
         Column(Modifier.padding(18.dp)) {
             Text(title, fontWeight = FontWeight.Bold)
             if (values.all { it == 0f }) {
-                Text("Nema podataka za odabrano razdoblje.")
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Nema podataka za odabrano razdoblje.", Modifier.weight(1f))
+                    BabyIllustration(
+                        if (title.contains("Tummy", ignoreCase = true)) {
+                            BabyIllustrationKind.TUMMY
+                        } else {
+                            BabyIllustrationKind.BOTTLE
+                        },
+                        Modifier.size(60.dp),
+                    )
+                }
             } else {
                 val barColor = MaterialTheme.colorScheme.primary
                 Canvas(Modifier.fillMaxWidth().height(130.dp).semantics { contentDescription = "$title. $summary" }) {
@@ -933,6 +905,7 @@ private fun SettingsScreen(
     var csvWarning by remember { mutableStateOf(false) }
     var deleteAll by remember { mutableStateOf(false) }
     var reminderTime by remember(state.settings.reminderTime) { mutableStateOf(LocalTime.parse(state.settings.reminderTime)) }
+    var showReminderTimePicker by remember { mutableStateOf(false) }
     val backupCreate =
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
             val bytes = exportBytes
@@ -972,12 +945,12 @@ private fun SettingsScreen(
                     Text("Dnevni podsjetnik", Modifier.weight(1f))
                     Switch(state.settings.reminderEnabled, viewModel::setReminder)
                 }
-                TextButton(onClick = {
-                    TimePickerDialog(context, { _, hour, minute ->
-                        reminderTime = LocalTime.of(hour, minute)
-                        viewModel.setReminderTime(reminderTime)
-                    }, reminderTime.hour, reminderTime.minute, true).show()
-                }) { Text("Vrijeme: ${reminderTime.hrTime()}") }
+                TimeSelectionRow(
+                    time = reminderTime,
+                    label = "Vrijeme podsjetnika",
+                    testTag = "reminder-time-row",
+                    onClick = { showReminderTimePicker = true },
+                )
                 if (!notifications.notificationsAllowed()) {
                     Text("Podsjetnici nisu omogućeni", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                     Row {
@@ -1005,6 +978,7 @@ private fun SettingsScreen(
                 }
             }
         }
+        item { AppUpdateSettingsCard(context) }
         item {
             SettingsCard("Podaci i sigurnosne kopije") {
                 Button(onClick = { exportPassword = true }, Modifier.fillMaxWidth()) { Text("Izvezi sigurnosnu kopiju") }
@@ -1018,7 +992,6 @@ private fun SettingsScreen(
                 ) { Text("Izbriši sve podatke", color = MaterialTheme.colorScheme.error) }
             }
         }
-        item { Text("Verzija aplikacije: ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall) }
     }
     if (exportPassword) {
         PasswordDialog("Nova lozinka sigurnosne kopije", repeat = true, onDismiss = { exportPassword = false }) { password ->
@@ -1028,6 +1001,17 @@ private fun SettingsScreen(
                 backupCreate.launch("BebinDnevnik-${LocalDate.now()}.bdk")
             }
         }
+    }
+    if (showReminderTimePicker) {
+        EntryTimePickerDialog(
+            selectedTime = reminderTime,
+            onConfirm = { selected ->
+                reminderTime = selected
+                viewModel.setReminderTime(selected)
+                showReminderTimePicker = false
+            },
+            onDismiss = { showReminderTimePicker = false },
+        )
     }
     if (importPassword) {
         PasswordDialog("Lozinka sigurnosne kopije", repeat = false, onDismiss = {
@@ -1088,6 +1072,78 @@ private fun SettingsScreen(
             viewModel.deleteAll()
             deleteAll = false
         }, { deleteAll = false })
+    }
+}
+
+@Composable
+private fun AppUpdateSettingsCard(context: android.content.Context) {
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var available by remember { mutableStateOf<AppUpdate?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+    SettingsCard("Ažuriranje aplikacije") {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column(Modifier.weight(1f)) {
+                Text("Instalirana verzija", style = MaterialTheme.typography.labelMedium)
+                Text(BuildConfig.VERSION_NAME, style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        Button(
+            onClick = {
+                checking = true
+                message = null
+                scope.launch {
+                    when (val result = UpdateChecker.check()) {
+                        is UpdateCheckResult.Available -> available = result.update
+                        is UpdateCheckResult.Current -> message = "Imate najnoviju verziju (${result.latestVersionName})."
+                        is UpdateCheckResult.Failed -> message = result.message
+                    }
+                    checking = false
+                }
+            },
+            enabled = !checking,
+            modifier = Modifier.fillMaxWidth().heightIn(min = BabyDimensions.TouchTarget).testTag("check-for-update"),
+        ) {
+            if (checking) {
+                CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(if (checking) "Provjeravam…" else "Provjeri ima li nova verzija")
+        }
+        message?.let {
+            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("update-message"))
+        }
+        Text(
+            "Provjera se pokreće samo pritiskom na gumb. Aplikacija ne šalje osobne podatke.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    available?.let { update ->
+        AlertDialog(
+            onDismissRequest = { available = null },
+            icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null) },
+            title = { Text("Dostupna je verzija ${update.versionName}") },
+            text = {
+                Text(
+                    update.releaseNotes.ifBlank {
+                        "Nova verzija spremna je za preuzimanje. Android će zatražiti potvrdu ažuriranja."
+                    },
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri()))
+                    available = null
+                }) { Text("Preuzmi ažuriranje") }
+            },
+            dismissButton = { TextButton(onClick = { available = null }) { Text("Kasnije") } },
+        )
     }
 }
 
