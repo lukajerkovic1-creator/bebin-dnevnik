@@ -33,7 +33,9 @@ class MainUiTest {
             rule.onAllNodesWithText("Započni").fetchSemanticsNodes().isNotEmpty() ||
                 rule.onAllNodesWithText("Kalendar").fetchSemanticsNodes().isNotEmpty()
         }
-        if (rule.onAllNodesWithText("Započni").fetchSemanticsNodes().isNotEmpty()) rule.onNodeWithText("Započni").performClick()
+        if (rule.onAllNodesWithText("Započni").fetchSemanticsNodes().isNotEmpty()) {
+            runCatching { rule.onNodeWithText("Započni").performClick() }
+        }
         rule.waitUntil(timeoutMillis = 60_000) {
             rule.onAllNodesWithText("Kalendar").fetchSemanticsNodes().isNotEmpty()
         }
