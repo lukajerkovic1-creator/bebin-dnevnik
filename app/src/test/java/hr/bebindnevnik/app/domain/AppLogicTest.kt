@@ -37,7 +37,7 @@ class AppLogicTest {
     @Test fun `summary calculates totals average last meal and tummy time`() {
         val meals = listOf(meal(1, 40), meal(2, 80, LocalTime.of(12, 0)))
         val sessions = listOf(tummy(1, 61), tummy(2, 119))
-        val entry = daily(TernaryStatus.DA, TernaryStatus.NE)
+        val entry = daily(TernaryStatus.DA, TernaryStatus.NE, stoolCount = 2)
         val summary = AppLogic.summary(date, meals, listOf(entry), sessions)
         assertEquals(120, summary.totalMl)
         assertEquals(2, summary.mealCount)
@@ -55,7 +55,7 @@ class AppLogicTest {
             AppLogic.summary(
                 date,
                 listOf(meal(1, 80)),
-                listOf(daily(TernaryStatus.DA, TernaryStatus.NE, true)),
+                listOf(daily(TernaryStatus.DA, TernaryStatus.NE, true, stoolCount = 0)),
                 emptyList(),
             )
         assertEquals(DayStatus.POTPUNO, completeWithoutSession.status)
@@ -70,11 +70,16 @@ class AppLogicTest {
                 listOf(daily(TernaryStatus.DA, TernaryStatus.NIJE_EVIDENTIRANO)),
                 emptyList(),
             )
-        assertEquals(listOf("vježbanje", "tummy time"), AppLogic.missing(summary))
+        assertEquals(listOf("vježbanje", "stolica", "tummy time"), AppLogic.missing(summary))
         assertFalse(
             AppLogic
                 .missing(
-                    AppLogic.summary(date, listOf(meal(1, 80)), listOf(daily(TernaryStatus.DA, TernaryStatus.NE, true)), emptyList()),
+                    AppLogic.summary(
+                        date,
+                        listOf(meal(1, 80)),
+                        listOf(daily(TernaryStatus.DA, TernaryStatus.NE, true, stoolCount = 0)),
+                        emptyList(),
+                    ),
                 ).isNotEmpty(),
         )
     }
@@ -92,6 +97,16 @@ class AppLogicTest {
         assertTrue(AppLogic.tummyWarnings(300, date, time).isEmpty())
     }
 
+    @Test fun `stool zero is recorded and high values require confirmation`() {
+        val zero = AppLogic.summary(date, emptyList(), listOf(daily(TernaryStatus.DA, TernaryStatus.DA, stoolCount = 0)), emptyList())
+        assertEquals(0, zero.stoolCount)
+        assertFalse(AppLogic.missing(zero).contains("stolica"))
+        assertTrue(AppLogic.stoolWarnings(15, date).isEmpty())
+        assertEquals(setOf(EntryWarning.HIGH_STOOL_COUNT), AppLogic.stoolWarnings(16, date))
+        assertThrows(IllegalArgumentException::class.java) { AppLogic.stoolWarnings(-1, date) }
+        assertThrows(IllegalArgumentException::class.java) { AppLogic.stoolWarnings(1, LocalDate.now().plusDays(1)) }
+    }
+
     @Test fun `statistics returns exact 7 30 and all-period windows`() {
         val today = LocalDate.of(2026, 2, 15)
         val first = today.minusDays(44)
@@ -104,6 +119,22 @@ class AppLogicTest {
         assertEquals(45, all.size)
         assertEquals(120, seven.sumOf { it.totalMl })
         assertEquals(200, all.sumOf { it.totalMl })
+    }
+
+    @Test fun `stool statistics never count missing days as zero`() {
+        val summaries =
+            listOf(
+                AppLogic.summary(date, emptyList(), emptyList(), emptyList()),
+                AppLogic.summary(date, emptyList(), listOf(daily(TernaryStatus.DA, TernaryStatus.DA, stoolCount = 0)), emptyList()),
+                AppLogic.summary(date, emptyList(), listOf(daily(TernaryStatus.DA, TernaryStatus.DA, stoolCount = 3)), emptyList()),
+            )
+        val statistics = AppLogic.stoolStatistics(summaries)
+        assertEquals(3, statistics.total)
+        assertEquals(1.5, statistics.averagePerRecordedDay, 0.0)
+        assertEquals(1, statistics.zeroDays)
+        assertEquals(1, statistics.positiveDays)
+        assertEquals(1, statistics.missingDays)
+        assertEquals(33, statistics.missingPercent)
     }
 
     @Test fun `reminder is sent only with missing data and at most once a day`() {
@@ -129,5 +160,6 @@ class AppLogicTest {
         waya: TernaryStatus,
         exercise: TernaryStatus,
         noTummy: Boolean = false,
-    ) = DailyEntryEntity(date.toString(), waya, exercise, noTummy, now, now)
+        stoolCount: Int? = null,
+    ) = DailyEntryEntity(date.toString(), waya, exercise, noTummy, now, now, stoolCount)
 }

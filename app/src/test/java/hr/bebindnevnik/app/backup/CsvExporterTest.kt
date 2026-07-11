@@ -28,7 +28,7 @@ class CsvExporterTest {
         val snapshot =
             AppSnapshot(
                 listOf(MealEntity(1, "2026-01-02", "08:05:06", 80, now, now)),
-                listOf(DailyEntryEntity("2026-01-02", TernaryStatus.DA, TernaryStatus.NE, false, now, now)),
+                listOf(DailyEntryEntity("2026-01-02", TernaryStatus.DA, TernaryStatus.NE, false, now, now, 0)),
                 listOf(TummySessionEntity(1, "2026-01-02", "09:10:11", 90, TummyInputMethod.RUCNO, now, now)),
                 SettingsEntity(theme = AppTheme.SVIJETLA),
             )
@@ -43,6 +43,9 @@ class CsvExporterTest {
         assertEquals(setOf("obroci.csv", "tummy_time.csv", "dnevna_evidencija.csv"), entries.keys)
         entries.values.forEach { assertArrayEquals(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()), it.copyOfRange(0, 3)) }
         assertTrue(String(entries.getValue("obroci.csv"), Charsets.UTF_8).contains("02.01.2026.;08:05:06;80"))
+        val dailyCsv = String(entries.getValue("dnevna_evidencija.csv"), Charsets.UTF_8)
+        assertTrue(dailyCsv.contains("Broj stolica"))
+        assertTrue(dailyCsv.contains("02.01.2026.;DA;NE;NE;0"))
     }
 
     @Test fun `empty database still exports headers`() {

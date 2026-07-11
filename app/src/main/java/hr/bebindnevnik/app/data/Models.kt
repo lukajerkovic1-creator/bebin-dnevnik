@@ -29,6 +29,7 @@ data class DailyEntryEntity(
     val noTummyTime: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
+    val stoolCount: Int? = null,
 )
 
 @Entity(tableName = "tummy_sessions")
@@ -63,6 +64,7 @@ data class DaySummary(
     val tummySeconds: Long,
     val tummyCount: Int,
     val noTummyTime: Boolean,
+    val stoolCount: Int?,
     val status: DayStatus,
 )
 

@@ -56,17 +56,42 @@ class AppRepository(
                 noTummyTime = noTummy ?: old?.noTummyTime ?: false,
                 createdAt = old?.createdAt ?: now,
                 updatedAt = now,
+                stoolCount = old?.stoolCount,
             ),
         )
     }
 
-    suspend fun resetDailyStatuses(date: LocalDate) =
+    suspend fun setStoolCount(
+        date: LocalDate,
+        count: Int?,
+    ) {
+        require(!date.isAfter(LocalDate.now())) { "Nije dopušten unos za budući datum." }
+        require(count == null || count >= 0) { "Broj stolica ne smije biti negativan." }
+        val key = date.toString()
+        val old = dao.dailyEntry(key)
+        val now = System.currentTimeMillis()
+        dao.putDaily(
+            DailyEntryEntity(
+                date = key,
+                waya = old?.waya ?: TernaryStatus.NIJE_EVIDENTIRANO,
+                exercise = old?.exercise ?: TernaryStatus.NIJE_EVIDENTIRANO,
+                noTummyTime = old?.noTummyTime ?: false,
+                createdAt = old?.createdAt ?: now,
+                updatedAt = now,
+                stoolCount = count,
+            ),
+        )
+    }
+
+    suspend fun resetDailyStatuses(date: LocalDate) {
         setDailyStatus(
             date,
             TernaryStatus.NIJE_EVIDENTIRANO,
             TernaryStatus.NIJE_EVIDENTIRANO,
             false,
         )
+        setStoolCount(date, null)
+    }
 
     suspend fun markNoTummy(date: LocalDate): Boolean {
         if (dao.tummyCount(date.toString()) > 0) return false

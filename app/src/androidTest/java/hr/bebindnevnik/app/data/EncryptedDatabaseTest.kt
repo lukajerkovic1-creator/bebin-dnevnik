@@ -33,7 +33,7 @@ class EncryptedDatabaseTest {
             Room
                 .databaseBuilder(context, AppDatabase::class.java, file.absolutePath)
                 .openHelperFactory(SupportOpenHelperFactory("test-password".toByteArray()))
-                .addMigrations(AppDatabase.MIGRATION_1_2)
+                .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
                 .build()
     }
 
@@ -73,6 +73,10 @@ class EncryptedDatabaseTest {
             assertTrue(repository.markNoTummy(date))
             repository.addTummy(date, java.time.LocalTime.NOON, 60, TummyInputMethod.RUCNO)
             assertFalse(repository.summary(date).noTummyTime)
+            repository.setStoolCount(date, 0)
+            assertEquals(0, repository.summary(date).stoolCount)
+            repository.setStoolCount(date, null)
+            assertEquals(null, repository.summary(date).stoolCount)
             repository.updateSettings { it.copy(theme = AppTheme.TAMNA) }
             assertEquals(AppTheme.TAMNA, repository.settings.first().theme)
         }
@@ -145,6 +149,63 @@ class EncryptedDatabaseTest {
             assertTrue(cursor.isNull(1))
         }
         v2.close()
+        context.deleteDatabase(name)
+    }
+
+    @Test fun migrationFromVersionTwoAddsNullableStoolCountWithoutChangingExistingDay() {
+        val name = "migration-2-3.db"
+        context.deleteDatabase(name)
+        val v2 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(2) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                                db.execSQL(
+                                    "CREATE TABLE daily_entries (date TEXT NOT NULL PRIMARY KEY, waya TEXT NOT NULL, exercise TEXT NOT NULL, noTummyTime INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)",
+                                )
+                                db.execSQL("INSERT INTO daily_entries VALUES ('2026-01-02', 'DA', 'NE', 1, 100, 200)")
+                            }
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) = Unit
+                        },
+                    ).build(),
+            )
+        v2.writableDatabase
+        v2.close()
+        val v3 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(3) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) = Unit
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) {
+                                AppDatabase.MIGRATION_2_3.migrate(db)
+                            }
+                        },
+                    ).build(),
+            )
+        v3.writableDatabase.query("SELECT waya, exercise, noTummyTime, stoolCount FROM daily_entries").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("DA", cursor.getString(0))
+            assertEquals("NE", cursor.getString(1))
+            assertEquals(1, cursor.getInt(2))
+            assertTrue(cursor.isNull(3))
+        }
+        v3.close()
         context.deleteDatabase(name)
     }
 }

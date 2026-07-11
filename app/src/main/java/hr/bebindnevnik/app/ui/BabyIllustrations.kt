@@ -22,6 +22,7 @@ internal enum class BabyIllustrationKind {
     BOTTLE,
     DROPS,
     EXERCISE,
+    STOOL,
     TUMMY,
     JOURNAL,
 }
@@ -66,6 +67,7 @@ internal fun BabyIllustration(
             BabyIllustrationKind.BOTTLE -> drawBottle(colors)
             BabyIllustrationKind.DROPS -> drawDrops(colors)
             BabyIllustrationKind.EXERCISE -> drawExercise(colors)
+            BabyIllustrationKind.STOOL -> drawStool(colors)
             BabyIllustrationKind.TUMMY -> drawTummy(colors)
             BabyIllustrationKind.JOURNAL -> drawJournal(colors)
         }
@@ -246,6 +248,28 @@ private fun DrawScope.drawStar(
 ) {
     drawLine(color, Offset(center.x - radius, center.y), Offset(center.x + radius, center.y), radius * .34f, StrokeCap.Round)
     drawLine(color, Offset(center.x, center.y - radius), Offset(center.x, center.y + radius), radius * .34f, StrokeCap.Round)
+}
+
+private fun DrawScope.drawStool(colors: IllustrationColors) {
+    val w = size.width
+    val h = size.height
+    drawCircle(colors.soft.copy(alpha = .65f), w * .43f, Offset(w * .5f, h * .53f))
+    val neutral = colors.line.copy(alpha = .82f)
+    drawOval(neutral, Offset(w * .2f, h * .58f), Size(w * .6f, h * .25f))
+    drawCircle(neutral, w * .22f, Offset(w * .42f, h * .57f))
+    drawCircle(neutral, w * .18f, Offset(w * .62f, h * .58f))
+    drawCircle(neutral, w * .13f, Offset(w * .52f, h * .35f))
+    drawCircle(colors.milk, w * .026f, Offset(w * .42f, h * .6f))
+    drawCircle(colors.milk, w * .026f, Offset(w * .59f, h * .6f))
+    drawArcRect(
+        colors.milk,
+        15f,
+        150f,
+        Rect(w * .43f, h * .6f, w * .59f, h * .72f),
+        Stroke(w * .025f, cap = StrokeCap.Round),
+    )
+    drawStar(colors.primary, Offset(w * .82f, h * .3f), w * .07f)
+    drawCircle(colors.accent, w * .045f, Offset(w * .2f, h * .34f))
 }
 
 private fun DrawScope.drawArcRect(

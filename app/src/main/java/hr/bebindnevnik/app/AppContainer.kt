@@ -33,7 +33,7 @@ class AppContainer(
                 Room
                     .databaseBuilder(appContext, AppDatabase::class.java, "bebin-dnevnik.db")
                     .openHelperFactory(SupportOpenHelperFactory(passphrase.copyOf()))
-                    .addMigrations(AppDatabase.MIGRATION_1_2)
+                    .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
                     .build()
         } finally {
             passphrase.fill(0)

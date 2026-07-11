@@ -31,9 +31,15 @@ object CsvExporter {
                 )
                 zip.addCsv(
                     "dnevna_evidencija.csv",
-                    listOf(listOf<Any>("Datum", "Waya kapi", "Vježbanje", "Nije bilo tummy timea")) +
+                    listOf(listOf<Any>("Datum", "Waya kapi", "Vježbanje", "Nije bilo tummy timea", "Broj stolica")) +
                         snapshot.dailyEntries.map {
-                            listOf<Any>(date(it.date), it.waya.name, it.exercise.name, if (it.noTummyTime) "DA" else "NE")
+                            listOf<Any>(
+                                date(it.date),
+                                it.waya.name,
+                                it.exercise.name,
+                                if (it.noTummyTime) "DA" else "NE",
+                                it.stoolCount ?: "Nije evidentirano",
+                            )
                         },
                 )
             }

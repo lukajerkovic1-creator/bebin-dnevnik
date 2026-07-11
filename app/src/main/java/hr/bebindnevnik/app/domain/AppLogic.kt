@@ -11,9 +11,18 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
-enum class EntryWarning { ZERO_ML, OVER_500_ML, DUPLICATE_TIME, UNDER_5_SECONDS, OVER_60_MINUTES }
+enum class EntryWarning { ZERO_ML, OVER_500_ML, DUPLICATE_TIME, UNDER_5_SECONDS, OVER_60_MINUTES, HIGH_STOOL_COUNT }
 
 enum class StatisticsRange { SEVEN_DAYS, THIRTY_DAYS, ALL }
+
+data class StoolStatistics(
+    val total: Int,
+    val averagePerRecordedDay: Double,
+    val zeroDays: Int,
+    val positiveDays: Int,
+    val missingDays: Int,
+    val missingPercent: Int,
+)
 
 object AppLogic {
     fun mealWarnings(
@@ -47,6 +56,15 @@ object AppLogic {
         }
     }
 
+    fun stoolWarnings(
+        count: Int,
+        date: LocalDate,
+    ): Set<EntryWarning> {
+        require(count >= 0) { "Broj stolica ne smije biti negativan." }
+        require(!date.isAfter(LocalDate.now())) { "Nije dopušten unos za budući datum." }
+        return if (count > 15) setOf(EntryWarning.HIGH_STOOL_COUNT) else emptySet()
+    }
+
     fun summary(
         date: LocalDate,
         meals: List<MealEntity>,
@@ -61,12 +79,15 @@ object AppLogic {
         val waya = entry?.waya ?: TernaryStatus.NIJE_EVIDENTIRANO
         val exercise = entry?.exercise ?: TernaryStatus.NIJE_EVIDENTIRANO
         val noTummy = entry?.noTummyTime == true
+        val stoolCount = entry?.stoolCount
         val complete =
             dayMeals.isNotEmpty() && waya != TernaryStatus.NIJE_EVIDENTIRANO &&
-                exercise != TernaryStatus.NIJE_EVIDENTIRANO && (daySessions.isNotEmpty() || noTummy)
+                exercise != TernaryStatus.NIJE_EVIDENTIRANO && stoolCount != null &&
+                (daySessions.isNotEmpty() || noTummy)
         val hasAny =
             dayMeals.isNotEmpty() || daySessions.isNotEmpty() || entry?.let {
-                it.waya != TernaryStatus.NIJE_EVIDENTIRANO || it.exercise != TernaryStatus.NIJE_EVIDENTIRANO || it.noTummyTime
+                it.waya != TernaryStatus.NIJE_EVIDENTIRANO || it.exercise != TernaryStatus.NIJE_EVIDENTIRANO ||
+                    it.stoolCount != null || it.noTummyTime
             } == true
         return DaySummary(
             date = key,
@@ -79,6 +100,7 @@ object AppLogic {
             tummySeconds = daySessions.sumOf { it.durationSeconds },
             tummyCount = daySessions.size,
             noTummyTime = noTummy,
+            stoolCount = stoolCount,
             status =
                 when {
                     complete -> DayStatus.POTPUNO
@@ -109,6 +131,7 @@ object AppLogic {
             if (summary.mealCount == 0) add("obrok")
             if (summary.waya == TernaryStatus.NIJE_EVIDENTIRANO) add("Waya kapi")
             if (summary.exercise == TernaryStatus.NIJE_EVIDENTIRANO) add("vježbanje")
+            if (summary.stoolCount == null) add("stolica")
             if (summary.tummyCount == 0 && !summary.noTummyTime) add("tummy time")
         }
 
@@ -129,6 +152,19 @@ object AppLogic {
         return generateSequence(start) { date -> if (date < today) date.plusDays(1) else null }
             .map { date -> summary(date, meals, entries, sessions) }
             .toList()
+    }
+
+    fun stoolStatistics(summaries: List<DaySummary>): StoolStatistics {
+        val recorded = summaries.mapNotNull { it.stoolCount }
+        val missing = summaries.size - recorded.size
+        return StoolStatistics(
+            total = recorded.sum(),
+            averagePerRecordedDay = if (recorded.isEmpty()) 0.0 else recorded.average(),
+            zeroDays = recorded.count { it == 0 },
+            positiveDays = recorded.count { it > 0 },
+            missingDays = missing,
+            missingPercent = if (summaries.isEmpty()) 0 else missing * 100 / summaries.size,
+        )
     }
 
     fun shouldSendReminder(

@@ -150,6 +150,17 @@ class MainViewModel(
             checkCompleteness()
         }
 
+    fun stoolWarnings(
+        count: Int,
+        date: LocalDate = selectedDate.value,
+    ): Set<EntryWarning> = AppLogic.stoolWarnings(count, date)
+
+    fun setStoolCount(count: Int?) =
+        viewModelScope.launch {
+            container.repository.setStoolCount(selectedDate.value, count)
+            checkCompleteness()
+        }
+
     fun resetStatuses() = viewModelScope.launch { container.repository.resetDailyStatuses(selectedDate.value) }
 
     fun markNoTummy() =

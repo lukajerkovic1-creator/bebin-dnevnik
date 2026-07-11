@@ -31,16 +31,25 @@ class BackupManagerTest {
 
     @Test fun `unknown format version and truncated files are rejected`() {
         val encrypted = BackupManager.encrypt(snapshot(0), "sigurna-šifra".toCharArray())
-        encrypted[7] = 2
+        encrypted[7] = 99
         assertThrows(InvalidBackupException::class.java) { BackupManager.decrypt(encrypted, "sigurna-šifra".toCharArray()) }
         assertThrows(InvalidBackupException::class.java) { BackupManager.decrypt(byteArrayOf(1, 2, 3), "sigurna-šifra".toCharArray()) }
+    }
+
+    @Test fun `legacy version one backup imports stool as not recorded`() {
+        val source = snapshot(1)
+        val encrypted = BackupManager.encryptWithVersion(source, "sigurna-šifra".toCharArray(), 1)
+        val imported = BackupManager.decrypt(encrypted, "sigurna-šifra".toCharArray()).snapshot
+        assertEquals(null, imported.dailyEntries.single().stoolCount)
+        assertEquals(source.meals, imported.meals)
+        assertEquals(source.tummySessions, imported.tummySessions)
     }
 
     private fun snapshot(count: Int): AppSnapshot {
         val now = 1_700_000_000_000
         return AppSnapshot(
             List(count) { MealEntity((it + 1).toLong(), "2026-01-02", "08:00", it, now, now) },
-            listOf(DailyEntryEntity("2026-01-02", TernaryStatus.DA, TernaryStatus.NE, true, now, now)),
+            listOf(DailyEntryEntity("2026-01-02", TernaryStatus.DA, TernaryStatus.NE, true, now, now, 0)),
             listOf(TummySessionEntity(1, "2026-01-02", "09:00", 90, TummyInputMethod.RUCNO, now, now)),
             SettingsEntity(),
         )

@@ -36,9 +36,10 @@ class InvalidBackupException(
     cause: Throwable? = null,
 ) : Exception(message, cause)
 
+@Suppress("TooManyFunctions")
 object BackupManager {
     private val magic = byteArrayOf(0x42, 0x44, 0x4B, 0x31)
-    private const val FORMAT_VERSION = 1
+    private const val FORMAT_VERSION = 2
     private const val ITERATIONS = 310_000
     private const val SALT_BYTES = 16
     private const val NONCE_BYTES = 12
@@ -46,21 +47,28 @@ object BackupManager {
     fun encrypt(
         snapshot: AppSnapshot,
         password: CharArray,
+    ): ByteArray = encryptWithVersion(snapshot, password, FORMAT_VERSION)
+
+    internal fun encryptWithVersion(
+        snapshot: AppSnapshot,
+        password: CharArray,
+        formatVersion: Int,
     ): ByteArray {
+        require(formatVersion in 1..FORMAT_VERSION) { "Nepodržana verzija sigurnosne kopije." }
         require(password.size >= 8) { "Lozinka mora imati najmanje 8 znakova." }
         val salt = ByteArray(SALT_BYTES).also(SecureRandom()::nextBytes)
         val nonce = ByteArray(NONCE_BYTES).also(SecureRandom()::nextBytes)
-        val plain = snapshot.toJson().toString().toByteArray(Charsets.UTF_8)
+        val plain = snapshot.toJson(formatVersion).toString().toByteArray(Charsets.UTF_8)
         val key = derive(password, salt, ITERATIONS)
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
-            cipher.updateAAD(magic + FORMAT_VERSION.toByte())
+            cipher.updateAAD(magic + formatVersion.toByte())
             val encrypted = cipher.doFinal(plain)
             ByteArrayOutputStream().use { output ->
                 DataOutputStream(output).use { data ->
                     data.write(magic)
-                    data.writeInt(FORMAT_VERSION)
+                    data.writeInt(formatVersion)
                     data.writeInt(ITERATIONS)
                     data.writeInt(salt.size)
                     data.writeInt(nonce.size)
@@ -89,7 +97,7 @@ object BackupManager {
                 val fileMagic = ByteArray(4).also(data::readFully)
                 if (!fileMagic.contentEquals(magic)) throw InvalidBackupException("Datoteka nije sigurnosna kopija Bebina dnevnika.")
                 val version = data.readInt()
-                if (version != FORMAT_VERSION) throw InvalidBackupException("Nepoznata verzija sigurnosne kopije: $version.")
+                if (version !in 1..FORMAT_VERSION) throw InvalidBackupException("Nepoznata verzija sigurnosne kopije: $version.")
                 val iterations = data.readInt()
                 val saltSize = data.readInt()
                 val nonceSize = data.readInt()
@@ -115,7 +123,7 @@ object BackupManager {
                         throw InvalidBackupException("Pogrešna lozinka ili oštećena sigurnosna kopija.", error)
                     }
                 return try {
-                    val snapshot = JSONObject(String(plain, Charsets.UTF_8)).toSnapshot()
+                    val snapshot = JSONObject(String(plain, Charsets.UTF_8)).toSnapshot(version)
                     BackupPreview(snapshot, snapshot.meals.size, snapshot.dailyEntries.size, snapshot.tummySessions.size)
                 } finally {
                     plain.fill(0)
@@ -144,13 +152,13 @@ object BackupManager {
         }
     }
 
-    private fun AppSnapshot.toJson() =
+    private fun AppSnapshot.toJson(formatVersion: Int) =
         JSONObject().apply {
-            put("formatVersion", FORMAT_VERSION)
+            put("formatVersion", formatVersion)
             put("appVersion", BuildConfig.VERSION_NAME)
             put("exportedAt", Instant.now().toString())
             put("meals", JSONArray().apply { meals.forEach { put(it.toJson()) } })
-            put("dailyEntries", JSONArray().apply { dailyEntries.forEach { put(it.toJson()) } })
+            put("dailyEntries", JSONArray().apply { dailyEntries.forEach { put(it.toJson(formatVersion)) } })
             put("tummySessions", JSONArray().apply { tummySessions.forEach { put(it.toJson()) } })
             put("settings", settings.toJson())
         }
@@ -165,7 +173,7 @@ object BackupManager {
             put("updatedAt", updatedAt)
         }
 
-    private fun DailyEntryEntity.toJson() =
+    private fun DailyEntryEntity.toJson(formatVersion: Int) =
         JSONObject().apply {
             put("date", date)
             put("waya", waya.name)
@@ -173,6 +181,7 @@ object BackupManager {
             put("noTummyTime", noTummyTime)
             put("createdAt", createdAt)
             put("updatedAt", updatedAt)
+            if (formatVersion >= 2) put("stoolCount", stoolCount ?: JSONObject.NULL)
         }
 
     private fun TummySessionEntity.toJson() =
@@ -194,8 +203,11 @@ object BackupManager {
             put("onboardingShown", onboardingShown)
         }
 
-    private fun JSONObject.toSnapshot(): AppSnapshot {
-        if (getInt("formatVersion") != FORMAT_VERSION) throw InvalidBackupException("Nepoznata verzija sadržaja sigurnosne kopije.")
+    private fun JSONObject.toSnapshot(headerVersion: Int): AppSnapshot {
+        val contentVersion = getInt("formatVersion")
+        if (contentVersion != headerVersion || contentVersion !in 1..FORMAT_VERSION) {
+            throw InvalidBackupException("Nepoznata verzija sadržaja sigurnosne kopije.")
+        }
         val meals =
             getJSONArray("meals").mapObjects { item ->
                 MealEntity(
@@ -210,12 +222,13 @@ object BackupManager {
         val entries =
             getJSONArray("dailyEntries").mapObjects { item ->
                 DailyEntryEntity(
-                    item.getString("date"),
-                    TernaryStatus.valueOf(item.getString("waya")),
-                    TernaryStatus.valueOf(item.getString("exercise")),
-                    item.getBoolean("noTummyTime"),
-                    item.getLong("createdAt"),
-                    item.getLong("updatedAt"),
+                    date = item.getString("date"),
+                    waya = TernaryStatus.valueOf(item.getString("waya")),
+                    exercise = TernaryStatus.valueOf(item.getString("exercise")),
+                    noTummyTime = item.getBoolean("noTummyTime"),
+                    createdAt = item.getLong("createdAt"),
+                    updatedAt = item.getLong("updatedAt"),
+                    stoolCount = if (contentVersion >= 2 && !item.isNull("stoolCount")) item.getInt("stoolCount") else null,
                 )
             }
         val sessions =

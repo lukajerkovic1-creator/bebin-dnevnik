@@ -21,8 +21,8 @@ class UiStateDateSelectionTest {
             )
         val entries =
             listOf(
-                DailyEntryEntity(today.toString(), TernaryStatus.NE, TernaryStatus.NE, false, 1, 1),
-                DailyEntryEntity(past.toString(), TernaryStatus.DA, TernaryStatus.DA, false, 1, 1),
+                DailyEntryEntity(today.toString(), TernaryStatus.NE, TernaryStatus.NE, false, 1, 1, 0),
+                DailyEntryEntity(past.toString(), TernaryStatus.DA, TernaryStatus.DA, false, 1, 1, 3),
             )
         val sessions = listOf(TummySessionEntity(1, past.toString(), "10:00", 90, TummyInputMethod.RUCNO, 1, 1))
 
@@ -33,11 +33,13 @@ class UiStateDateSelectionTest {
         assertEquals(TernaryStatus.DA, pastState.summary.waya)
         assertEquals(TernaryStatus.DA, pastState.summary.exercise)
         assertEquals(90, pastState.summary.tummySeconds)
+        assertEquals(3, pastState.summary.stoolCount)
 
         val todayState = pastState.copy(selectedDate = today)
         assertEquals(listOf(1L), todayState.selectedMeals.map { it.id })
         assertEquals(40, todayState.summary.totalMl)
         assertEquals(0, todayState.summary.tummyCount)
         assertEquals(TernaryStatus.NE, todayState.summary.waya)
+        assertEquals(0, todayState.summary.stoolCount)
     }
 }

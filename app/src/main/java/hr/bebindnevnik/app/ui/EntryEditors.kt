@@ -532,4 +532,5 @@ private fun warningLabelForEditor(warning: EntryWarning): String =
         EntryWarning.DUPLICATE_TIME -> "Već postoji obrok s potpuno jednakim datumom i vremenom."
         EntryWarning.UNDER_5_SECONDS -> "Sesija je kraća od 5 sekundi."
         EntryWarning.OVER_60_MINUTES -> "Sesija je dulja od 60 minuta."
+        EntryWarning.HIGH_STOOL_COUNT -> "Broj stolica veći je od 15."
     }

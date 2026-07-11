@@ -114,4 +114,23 @@ class MainUiTest {
         rule.onAllNodesWithContentDescription("Uredi zapis")[0].performScrollTo().assertIsDisplayed()
         rule.onAllNodesWithContentDescription("Izbriši zapis")[0].assertIsDisplayed()
     }
+
+    @Test fun stoolCardSavesZeroAndCanEditPreviousDay() {
+        finishOnboardingIfNeeded()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("stool-card"))
+        rule.onNodeWithTag("edit-stool").performClick()
+        rule.onNodeWithTag("stool-0").performClick()
+        rule.onNodeWithTag("save-stool").performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("stool-card"))
+        rule.onNodeWithText("Trenutačno: 0 stolica").assertIsDisplayed()
+
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("previous-day"))
+        rule.onNodeWithTag("previous-day").performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("stool-card"))
+        rule.onNodeWithTag("edit-stool").performClick()
+        rule.onNodeWithTag("stool-3").performClick()
+        rule.onNodeWithTag("save-stool").performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("stool-card"))
+        rule.onNodeWithText("Trenutačno: 3 stolice").assertIsDisplayed()
+    }
 }

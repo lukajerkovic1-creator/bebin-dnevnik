@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -267,7 +268,7 @@ private fun Onboarding(onFinish: () -> Unit) {
         listOf(
             "Evidentirajte obroke, Waya kapi, vježbanje i tummy time.",
             "Nema profila djeteta ni identifikacijskih podataka.",
-            "Svi podaci ostaju samo na ovom uređaju; aplikacija nema pristup internetu.",
+            "Svi osobni podaci ostaju samo na ovom uređaju; internet se koristi samo kada ručno provjerite novu verziju.",
             "Deinstalacijom ili gubitkom uređaja podaci se gube ako prije toga ne izvezete sigurnosnu kopiju.",
             "Dnevni podsjetnik je neobvezan i može se isključiti u Postavkama.",
         ).forEach { Text("• $it", Modifier.padding(vertical = 6.dp), style = MaterialTheme.typography.bodyLarge) }
@@ -277,6 +278,7 @@ private fun Onboarding(onFinish: () -> Unit) {
 }
 
 @Composable
+@Suppress("LongMethod", "CyclomaticComplexMethod")
 private fun TodayScreen(
     state: UiState,
     timer: hr.bebindnevnik.app.notifications.TimerState,
@@ -291,11 +293,29 @@ private fun TodayScreen(
     var newTummy by remember { mutableStateOf(false) }
     var deleteMeal by remember { mutableStateOf<MealEntity?>(null) }
     var deleteTummy by remember { mutableStateOf<TummySessionEntity?>(null) }
+    var stoolEditor by remember { mutableStateOf(false) }
     var resetConfirm by remember { mutableStateOf(false) }
     val isToday = state.selectedDate == LocalDate.now()
+    val notificationVisible = !notifications.notificationsAllowed()
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(highlight, notificationVisible) {
+        val target = listOf("obrok", "Waya kapi", "vježbanje", "stolica", "tummy time").firstOrNull { it in highlight }
+        val baseIndex =
+            when (target) {
+                "obrok" -> 1
+                "Waya kapi" -> 3
+                "vježbanje" -> 4
+                "stolica" -> 5
+                "tummy time" -> 6
+                else -> null
+            }
+        if (baseIndex != null) listState.animateScrollToItem(baseIndex + if (notificationVisible) 1 else 0)
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -306,7 +326,7 @@ private fun TodayScreen(
                 onDateSelected = viewModel::selectDate,
             )
         }
-        if (!notifications.notificationsAllowed()) item { NotificationWarning(openSettings) }
+        if (notificationVisible) item { NotificationWarning(openSettings) }
         item {
             HighlightCard("obrok" in highlight) {
                 IllustratedSectionTitle("Posljednji obrok", BabyIllustrationKind.BOTTLE)
@@ -349,6 +369,18 @@ private fun TodayScreen(
                 state.summary.exercise,
                 viewModel::setExercise,
             )
+        }
+        item {
+            HighlightCard("stolica" in highlight, Modifier.testTag("stool-card")) {
+                IllustratedSectionTitle("Stolica", BabyIllustrationKind.STOOL)
+                Text("Trenutačno: ${stoolCountText(state.summary.stoolCount)}", style = MaterialTheme.typography.bodyLarge)
+                Button(
+                    onClick = { stoolEditor = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("edit-stool"),
+                ) {
+                    Text(if (state.summary.stoolCount == null) "Evidentiraj broj" else "Uredi broj")
+                }
+            }
         }
         item {
             HighlightCard("tummy time" in highlight, Modifier.testTag("tummy-card")) {
@@ -429,6 +461,15 @@ private fun TodayScreen(
             },
         )
     }
+    if (stoolEditor) {
+        StoolEditorSheet(
+            initialCount = state.summary.stoolCount,
+            date = state.selectedDate,
+            onWarnings = { viewModel.stoolWarnings(it, state.selectedDate) },
+            onSave = viewModel::setStoolCount,
+            onClose = { stoolEditor = false },
+        )
+    }
     deleteMeal?.let { item ->
         ConfirmDelete("Obrisati ovaj obrok?", {
             viewModel.deleteMeal(item)
@@ -448,7 +489,11 @@ private fun TodayScreen(
         AlertDialog(
             onDismissRequest = { resetConfirm = false },
             title = { Text("Resetirati dnevne statuse?") },
-            text = { Text("Waya kapi i vježbanje vratit će se na „Nije evidentirano”. Obroci i tummy-time sesije neće se izbrisati.") },
+            text = {
+                Text(
+                    "Waya kapi, vježbanje i stolica vratit će se na „Nije evidentirano”. Obroci i tummy-time sesije neće se izbrisati.",
+                )
+            },
             confirmButton = {
                 Button(onClick = {
                     viewModel.resetStatuses()
@@ -567,6 +612,7 @@ private fun SummaryCard(summary: DaySummary) =
             Text("Posljednji obrok: ${summary.lastMealTime?.hrStoredTime() ?: "Nije evidentirano"}")
             Text("Waya kapi: ${summary.waya.label()}")
             Text("Vježbanje: ${summary.exercise.label()}")
+            Text("Stolica: ${stoolCountText(summary.stoolCount)}")
             Text("Tummy time: ${summary.tummySeconds.durationText()} (${summary.tummyCount} sesija)")
             Text("Status dana: ${dayStatusLabel(summary.status)}", fontWeight = FontWeight.Bold)
         }
@@ -793,6 +839,7 @@ private fun StatisticsScreen(state: UiState) {
                 }
             }
         }
+        item { StoolStatisticsCard(summaries) }
         item {
             BarChart(
                 "Ukupno ml po danu",
@@ -827,6 +874,75 @@ private fun StatisticsScreen(state: UiState) {
                     Text("Vježbanje", fontWeight = FontWeight.Bold)
                     TernaryStatus.entries.forEach { Text("${it.label()}: ${exercise[it]}") }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StoolStatisticsCard(summaries: List<DaySummary>) {
+    val recorded = summaries.mapNotNull { it.stoolCount }
+    val statistics = AppLogic.stoolStatistics(summaries)
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(BabyDimensions.CardPadding), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            IllustratedSectionTitle("Stolica", BabyIllustrationKind.STOOL)
+            if (recorded.isEmpty()) {
+                Text("Nema evidentiranih podataka o stolici za odabrano razdoblje.")
+            } else {
+                Text("Ukupno evidentiranih stolica: ${statistics.total}")
+                Text("Prosječno po evidentiranom danu: ${"%.1f".format(statistics.averagePerRecordedDay)}")
+                Text("Dani s 0 stolica: ${statistics.zeroDays}")
+                Text("Dani s barem jednom stolicom: ${statistics.positiveDays}")
+                Text("Bez evidentiranog podatka: ${statistics.missingDays}/${summaries.size} (${statistics.missingPercent}%)")
+                val primary = MaterialTheme.colorScheme.primary
+                val missingColor = MaterialTheme.colorScheme.outlineVariant
+                val description =
+                    "Broj stolica po danu. Ukupno ${statistics.total}. ${statistics.missingDays} dana bez evidentiranog podatka."
+                Canvas(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                        .semantics { contentDescription = description }
+                        .testTag("stool-chart"),
+                ) {
+                    val max = recorded.maxOrNull()?.coerceAtLeast(1) ?: 1
+                    val step = size.width / summaries.size.coerceAtLeast(1)
+                    summaries.forEachIndexed { index, summary ->
+                        val value = summary.stoolCount
+                        val left = index * step
+                        if (value == null) {
+                            drawRect(
+                                missingColor,
+                                topLeft =
+                                    androidx.compose.ui.geometry
+                                        .Offset(left, size.height - 4.dp.toPx()),
+                                size =
+                                    androidx.compose.ui.geometry
+                                        .Size((step - 2).coerceAtLeast(1f), 4.dp.toPx()),
+                            )
+                        } else if (value == 0) {
+                            drawCircle(
+                                primary,
+                                radius = 2.dp.toPx(),
+                                center =
+                                    androidx.compose.ui.geometry
+                                        .Offset(left + step / 2, size.height - 3.dp.toPx()),
+                            )
+                        } else {
+                            val barHeight = size.height * value / max
+                            drawRect(
+                                primary,
+                                topLeft =
+                                    androidx.compose.ui.geometry
+                                        .Offset(left, size.height - barHeight),
+                                size =
+                                    androidx.compose.ui.geometry
+                                        .Size((step - 2).coerceAtLeast(1f), barHeight),
+                            )
+                        }
+                    }
+                }
+                Text("Graf prikazuje samo evidentirane vrijednosti; siva crta označava dan bez podatka.", style = MaterialTheme.typography.bodySmall)
             }
         }
     }

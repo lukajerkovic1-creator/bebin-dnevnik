@@ -23,7 +23,7 @@ class EnumConverters {
 
 @Database(
     entities = [MealEntity::class, DailyEntryEntity::class, TummySessionEntity::class, SettingsEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -35,6 +35,13 @@ abstract class AppDatabase : RoomDatabase() {
             object : Migration(1, 2) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE settings ADD COLUMN lastNotificationDate TEXT")
+                }
+            }
+
+        val MIGRATION_2_3 =
+            object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE daily_entries ADD COLUMN stoolCount INTEGER")
                 }
             }
     }
