@@ -7,6 +7,8 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+const val DATABASE_VERSION = 3
+
 class EnumConverters {
     @TypeConverter fun ternaryToString(value: TernaryStatus): String = value.name
 
@@ -23,7 +25,7 @@ class EnumConverters {
 
 @Database(
     entities = [MealEntity::class, DailyEntryEntity::class, TummySessionEntity::class, SettingsEntity::class],
-    version = 3,
+    version = DATABASE_VERSION,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)

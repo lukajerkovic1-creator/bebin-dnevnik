@@ -22,7 +22,7 @@ jobs:
           cmdline-tools-version: 14742923
           packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:formatCheck :app:detekt :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+      - run: ./gradlew :app:verifySafetyInvariants :app:formatCheck :app:detekt :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
 
   instrumentation-api29:
     if: false # Covered by the required Android CI run on main.
@@ -60,8 +60,9 @@ jobs:
       KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      RELEASE_VERSION_CODE: ${{ github.run_number }}
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
       RELEASE_VERSION_NAME: ${{ github.ref_name }}
+      EXPECTED_CERT_SHA256: f1b4b84d9b0c729bd2ddf56309d581f0a541a80c822f18e69f2b3bbe659d2d5e
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -71,6 +72,24 @@ jobs:
           cmdline-tools-version: 14742923
           packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Izračunaj i provjeri monotoni versionCode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo 'Tag mora biti oblika v1.2.3'; exit 1; }
+          CODE=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]}))
+          PREVIOUS_CODE=0
+          PREVIOUS_URL="$(gh api repos/${GITHUB_REPOSITORY}/releases/latest --jq '.assets[] | select(.name=="BebinDnevnik.apk") | .browser_download_url' 2>/dev/null || true)"
+          if [ -n "$PREVIOUS_URL" ]; then
+            curl --fail --location --silent --show-error "$PREVIOUS_URL" --output previous.apk
+            BADGING="$($ANDROID_HOME/build-tools/37.0.0/aapt dump badging previous.apk | head -1)"
+            PREVIOUS_CODE="$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<< "$BADGING")"
+          fi
+          [ "$CODE" -gt "${PREVIOUS_CODE:-0}" ] || { echo "versionCode $CODE nije veći od $PREVIOUS_CODE"; exit 1; }
+          echo "RELEASE_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION_NUMBER=$VERSION" >> "$GITHUB_ENV"
+          rm -f previous.apk
       - name: Provjeri release tajne
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -79,6 +98,7 @@ jobs:
           test -n "$KEYSTORE_PASSWORD" || { echo 'Nedostaje ANDROID_KEYSTORE_PASSWORD'; exit 1; }
           test -n "$KEY_ALIAS" || { echo 'Nedostaje ANDROID_KEY_ALIAS'; exit 1; }
           test -n "$KEY_PASSWORD" || { echo 'Nedostaje ANDROID_KEY_PASSWORD'; exit 1; }
+          test -n "$GOOGLE_WEB_CLIENT_ID" || { echo 'Nedostaje GOOGLE_WEB_CLIENT_ID'; exit 1; }
       - name: Pripremi keystore bez ispisa tajni
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -94,18 +114,33 @@ jobs:
         run: |
           ./gradlew :app:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk BebinDnevnik.apk
-          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose BebinDnevnik.apk
+          APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          AAPT="$ANDROID_HOME/build-tools/37.0.0/aapt"
+          "$APKSIGNER" verify --verbose --print-certs BebinDnevnik.apk | tee signing.txt
+          CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signing.txt | tr 'A-F' 'a-f')"
+          [ "$CERT" = "$EXPECTED_CERT_SHA256" ] || { echo 'Produkcijski certifikat nije očekivani certifikat.'; exit 1; }
+          BADGING="$($AAPT dump badging BebinDnevnik.apk | head -1)"
+          PACKAGE="$(sed -n "s/package: name='\([^']*\)'.*/\1/p" <<< "$BADGING")"
+          CODE="$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<< "$BADGING")"
+          [ "$PACKAGE" = 'hr.bebindnevnik.app' ] || { echo "Pogrešan applicationId: $PACKAGE"; exit 1; }
+          [ "$CODE" = "$RELEASE_VERSION_CODE" ] || { echo "Pogrešan versionCode: $CODE"; exit 1; }
           sha256sum BebinDnevnik.apk > BebinDnevnik.apk.sha256
+          rm -f signing.txt
       - name: Objavi GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" BebinDnevnik.apk BebinDnevnik.apk.sha256 --verify-tag --generate-notes
+        run: |
+          gh release create "$GITHUB_REF_NAME" BebinDnevnik.apk BebinDnevnik.apk.sha256 \
+            --verify-tag --latest --title "Bebin dnevnik $RELEASE_VERSION_NUMBER" \
+            --notes "Verzija: $RELEASE_VERSION_NUMBER
+          Datum objave: $(date -u +%Y-%m-%d)
+
+          Potpisani produkcijski APK za sigurno ažuriranje postojeće instalacije."
       - name: Pripremi manifest najnovije verzije
         run: |
-          VERSION_NAME="${GITHUB_REF_NAME#v}"
           jq \
             --argjson versionCode "$RELEASE_VERSION_CODE" \
-            --arg versionName "$VERSION_NAME" \
+            --arg versionName "$RELEASE_VERSION_NUMBER" \
             '.versionCode = $versionCode | .versionName = $versionName' \
             docs/version.json > docs/version.json.tmp
           mv docs/version.json.tmp docs/version.json

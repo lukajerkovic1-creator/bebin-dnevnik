@@ -89,7 +89,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
+import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -100,6 +100,9 @@ import hr.bebindnevnik.app.BuildConfig
 import hr.bebindnevnik.app.backup.BackupManager
 import hr.bebindnevnik.app.backup.BackupPreview
 import hr.bebindnevnik.app.backup.CsvExporter
+import hr.bebindnevnik.app.backup.LocalSafetyBackup
+import hr.bebindnevnik.app.cloud.CloudBackupPreferences
+import hr.bebindnevnik.app.cloud.CloudBackupWorker
 import hr.bebindnevnik.app.data.AppTheme
 import hr.bebindnevnik.app.data.DayStatus
 import hr.bebindnevnik.app.data.DaySummary
@@ -109,16 +112,20 @@ import hr.bebindnevnik.app.data.TummySessionEntity
 import hr.bebindnevnik.app.domain.AppLogic
 import hr.bebindnevnik.app.domain.StatisticsRange
 import hr.bebindnevnik.app.notifications.NotificationHelper
+import hr.bebindnevnik.app.update.ApkUpdateManager
 import hr.bebindnevnik.app.update.AppUpdate
 import hr.bebindnevnik.app.update.UpdateCheckResult
 import hr.bebindnevnik.app.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
+import java.util.concurrent.atomic.AtomicBoolean
 
 private data class NavItem(
     val route: String,
@@ -171,6 +178,7 @@ fun BebinDnevnikApp(
 
     if (!state.settings.onboardingShown) {
         Onboarding(
+            viewModel = viewModel,
             onFinish = {
                 viewModel.finishOnboarding()
                 if (Build.VERSION.SDK_INT >= 33) notificationExplanation = true
@@ -216,6 +224,7 @@ fun BebinDnevnikApp(
             NavigationBar {
                 navItems.forEach { item ->
                     NavigationBarItem(
+                        modifier = Modifier.testTag("navigation-${item.route}"),
                         selected = backStack?.destination?.route == item.route,
                         onClick = {
                             navController.navigate(item.route) {
@@ -256,7 +265,23 @@ fun BebinDnevnikApp(
 }
 
 @Composable
-private fun Onboarding(onFinish: () -> Unit) {
+private fun Onboarding(
+    viewModel: MainViewModel,
+    onFinish: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showCloud by remember { mutableStateOf(false) }
+    var importUri by remember { mutableStateOf<Uri?>(null) }
+    var askPassword by remember { mutableStateOf(false) }
+    var preview by remember { mutableStateOf<BackupPreview?>(null) }
+    val openBackup =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                importUri = uri
+                askPassword = true
+            }
+        }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -268,12 +293,48 @@ private fun Onboarding(onFinish: () -> Unit) {
         listOf(
             "Evidentirajte obroke, Waya kapi, vježbanje i tummy time.",
             "Nema profila djeteta ni identifikacijskih podataka.",
-            "Svi osobni podaci ostaju samo na ovom uređaju; internet se koristi samo kada ručno provjerite novu verziju.",
-            "Deinstalacijom ili gubitkom uređaja podaci se gube ako prije toga ne izvezete sigurnosnu kopiju.",
+            "Lokalna šifrirana baza glavni je izvor podataka i aplikacija radi bez interneta.",
+            "Dobrovoljni šifrirani Google Drive backup štiti od deinstalacije, kvara ili gubitka uređaja.",
             "Dnevni podsjetnik je neobvezan i može se isključiti u Postavkama.",
         ).forEach { Text("• $it", Modifier.padding(vertical = 6.dp), style = MaterialTheme.typography.bodyLarge) }
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onFinish, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Započni") }
+        Button(onClick = onFinish, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Započni bez vraćanja") }
+        OutlinedButton(onClick = { showCloud = !showCloud }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+            Text("Vrati podatke s Google Drivea")
+        }
+        OutlinedButton(onClick = { openBackup.launch(arrayOf("application/octet-stream", "application/*")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+            Text("Uvezi sigurnosnu kopiju iz datoteke")
+        }
+        if (showCloud) CloudBackupSettingsCard(viewModel)
+    }
+    if (askPassword) {
+        PasswordDialog("Lozinka sigurnosne kopije", repeat = false, onDismiss = { askPassword = false }) { password ->
+            scope.launch {
+                try {
+                    val bytes = context.contentResolver.openInputStream(importUri ?: return@launch)?.use { it.readBytes() } ?: return@launch
+                    preview = withContext(Dispatchers.Default) { BackupManager.decrypt(bytes, password.toCharArray()) }
+                    askPassword = false
+                } catch (error: Exception) {
+                    android.widget.Toast
+                        .makeText(context, error.message ?: "Uvoz nije uspio.", android.widget.Toast.LENGTH_LONG)
+                        .show()
+                }
+            }
+        }
+    }
+    preview?.let { data ->
+        AlertDialog(
+            onDismissRequest = { preview = null },
+            title = { Text("Vratiti podatke?") },
+            text = { Text("Vratit će se ${data.mealCount} obroka, ${data.dailyCount} dnevnih evidencija i ${data.tummyCount} tummy-time sesija.") },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.replaceAll(data.snapshot)
+                    preview = null
+                }) { Text("Vrati podatke") }
+            },
+            dismissButton = { TextButton(onClick = { preview = null }) { Text("Odustani") } },
+        )
     }
 }
 
@@ -1005,6 +1066,7 @@ private fun BarChart(
 }
 
 @Composable
+@Suppress("LongMethod") // Declarative settings layout includes its tightly coupled launcher and confirmation state.
 private fun SettingsScreen(
     state: UiState,
     viewModel: MainViewModel,
@@ -1094,7 +1156,7 @@ private fun SettingsScreen(
                 }
             }
         }
-        item { AppUpdateSettingsCard(context) }
+        item { AppUpdateSettingsCard(context, viewModel) }
         item {
             SettingsCard("Podaci i sigurnosne kopije") {
                 Button(onClick = { exportPassword = true }, Modifier.fillMaxWidth()) { Text("Izvezi sigurnosnu kopiju") }
@@ -1108,6 +1170,7 @@ private fun SettingsScreen(
                 ) { Text("Izbriši sve podatke", color = MaterialTheme.colorScheme.error) }
             }
         }
+        item { CloudBackupSettingsCard(viewModel) }
     }
     if (exportPassword) {
         PasswordDialog("Nova lozinka sigurnosne kopije", repeat = true, onDismiss = { exportPassword = false }) { password ->
@@ -1192,11 +1255,39 @@ private fun SettingsScreen(
 }
 
 @Composable
-private fun AppUpdateSettingsCard(context: android.content.Context) {
+private fun AppUpdateSettingsCard(
+    context: android.content.Context,
+    viewModel: MainViewModel,
+) {
     val scope = rememberCoroutineScope()
+    val manager = remember { ApkUpdateManager(context) }
+    val preferences = remember { context.getSharedPreferences("update_status", android.content.Context.MODE_PRIVATE) }
     var checking by remember { mutableStateOf(false) }
     var available by remember { mutableStateOf<AppUpdate?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var progress by remember { mutableIntStateOf(0) }
+    var downloading by remember { mutableStateOf(false) }
+    var preparedFile by remember { mutableStateOf<File?>(null) }
+    var cancellation by remember { mutableStateOf<AtomicBoolean?>(null) }
+    var lastCheck by remember { mutableStateOf(preferences.getString("last_check", null)) }
+    val installLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            message = "Ako ste odustali od instalacije, postojeća aplikacija i svi podaci ostali su nepromijenjeni."
+        }
+    val unknownSourceLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val file = preparedFile
+            if (file != null && manager.canInstallPackages()) installLauncher.launch(manager.installIntent(file))
+        }
+
+    fun startInstaller(file: File) {
+        if (manager.canInstallPackages()) {
+            installLauncher.launch(manager.installIntent(file))
+        } else {
+            message = "Dopustite instaliranje iz ovog izvora pa će se postupak nastaviti."
+            unknownSourceLauncher.launch(manager.unknownSourcesIntent())
+        }
+    }
     SettingsCard("Ažuriranje aplikacije") {
         Row(
             Modifier.fillMaxWidth(),
@@ -1206,9 +1297,10 @@ private fun AppUpdateSettingsCard(context: android.content.Context) {
             Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f)) {
                 Text("Instalirana verzija", style = MaterialTheme.typography.labelMedium)
-                Text(BuildConfig.VERSION_NAME, style = MaterialTheme.typography.titleMedium)
+                Text("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.titleMedium)
             }
         }
+        lastCheck?.let { Text("Posljednja provjera: $it", style = MaterialTheme.typography.bodySmall) }
         Button(
             onClick = {
                 checking = true
@@ -1219,6 +1311,14 @@ private fun AppUpdateSettingsCard(context: android.content.Context) {
                         is UpdateCheckResult.Current -> message = "Imate najnoviju verziju (${result.latestVersionName})."
                         is UpdateCheckResult.Failed -> message = result.message
                     }
+                    lastCheck =
+                        java.time.ZonedDateTime
+                            .now()
+                            .format(
+                                java.time.format.DateTimeFormatter
+                                    .ofPattern("dd.MM.yyyy. HH:mm"),
+                            )
+                    preferences.edit { putString("last_check", lastCheck) }
                     checking = false
                 }
             },
@@ -1229,13 +1329,18 @@ private fun AppUpdateSettingsCard(context: android.content.Context) {
                 CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                 Spacer(Modifier.width(10.dp))
             }
-            Text(if (checking) "Provjeravam…" else "Provjeri ima li nova verzija")
+            Text(if (checking) "Provjeravam…" else "Provjeri ažuriranja")
+        }
+        if (downloading) {
+            androidx.compose.material3.LinearProgressIndicator({ progress / 100f }, Modifier.fillMaxWidth())
+            Text("Preuzimanje: $progress %")
+            TextButton(onClick = { cancellation?.set(true) }, Modifier.fillMaxWidth()) { Text("Prekini") }
         }
         message?.let {
             Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("update-message"))
         }
         Text(
-            "Provjera se pokreće samo pritiskom na gumb. Aplikacija ne šalje osobne podatke.",
+            "Aplikacija provjerava službeni GitHub Release. Prije instalacije provjerava SHA-256, paket, verziju i potpis.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1254,9 +1359,32 @@ private fun AppUpdateSettingsCard(context: android.content.Context) {
             },
             confirmButton = {
                 Button(onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri()))
-                    available = null
-                }) { Text("Preuzmi ažuriranje") }
+                    downloading = true
+                    progress = 0
+                    val token = AtomicBoolean(false)
+                    cancellation = token
+                    scope.launch {
+                        try {
+                            val file = manager.downloadAndVerify(update, token) { progress = it }
+                            withContext(Dispatchers.IO) { LocalSafetyBackup.create(context, viewModel.snapshot()) }
+                            CloudBackupPreferences(context).let { cloud ->
+                                if (cloud.status().enabled) {
+                                    cloud.markDirty()
+                                    CloudBackupWorker.schedule(context, delaySeconds = 0, replace = true)
+                                }
+                            }
+                            preparedFile = file
+                            message = "APK je preuzet i sve sigurnosne provjere su prošle."
+                            startInstaller(file)
+                            available = null
+                        } catch (error: Exception) {
+                            message = error.message ?: "Preuzimanje nije uspjelo. Pokušajte ponovno."
+                        } finally {
+                            downloading = false
+                            cancellation = null
+                        }
+                    }
+                }, enabled = !downloading) { Text("Preuzmi i instaliraj") }
             },
             dismissButton = { TextButton(onClick = { available = null }) { Text("Kasnije") } },
         )

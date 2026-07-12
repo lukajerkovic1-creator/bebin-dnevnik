@@ -6,23 +6,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import hr.bebindnevnik.app.notifications.NotificationHelper
 import hr.bebindnevnik.app.ui.BebinDnevnikApp
 import hr.bebindnevnik.app.ui.BebinDnevnikTheme
+import hr.bebindnevnik.app.ui.DatabaseRecoveryScreen
 import hr.bebindnevnik.app.ui.MainViewModel
 
 class MainActivity : ComponentActivity() {
@@ -52,13 +44,7 @@ class MainActivity : ComponentActivity() {
         } catch (error: Exception) {
             setContent {
                 BebinDnevnikTheme(hr.bebindnevnik.app.data.AppTheme.SUSTAV) {
-                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Column(verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Podatke nije moguće sigurno otvoriti", style = MaterialTheme.typography.headlineSmall)
-                            Text(error.message ?: "Šifrirana baza ili zaštitni ključ nisu dostupni. Nemojte brisati podatke.")
-                            Button(onClick = { recreate() }) { Text("Pokušaj ponovno") }
-                        }
-                    }
+                    DatabaseRecoveryScreen(error) { recreate() }
                 }
             }
         }

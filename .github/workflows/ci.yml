@@ -30,7 +30,7 @@ jobs:
       - name: Provjeri Gradle konfiguraciju
         run: ./gradlew help --warning-mode=all
       - name: Format, statička analiza, lint i unit testovi
-        run: ./gradlew :app:formatCheck :app:detekt :app:lintDebug :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin
+        run: ./gradlew :app:verifySafetyInvariants :app:formatCheck :app:detekt :app:lintDebug :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin
       - name: Izgradi debug APK
         run: ./gradlew :app:assembleDebug
       - uses: actions/upload-artifact@v4

@@ -58,7 +58,7 @@ object BackupManager {
         require(password.size >= 8) { "Lozinka mora imati najmanje 8 znakova." }
         val salt = ByteArray(SALT_BYTES).also(SecureRandom()::nextBytes)
         val nonce = ByteArray(NONCE_BYTES).also(SecureRandom()::nextBytes)
-        val plain = snapshot.toJson(formatVersion).toString().toByteArray(Charsets.UTF_8)
+        val plain = snapshotJson(snapshot, formatVersion).toByteArray(Charsets.UTF_8)
         val key = derive(password, salt, ITERATIONS)
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -123,7 +123,7 @@ object BackupManager {
                         throw InvalidBackupException("Pogrešna lozinka ili oštećena sigurnosna kopija.", error)
                     }
                 return try {
-                    val snapshot = JSONObject(String(plain, Charsets.UTF_8)).toSnapshot(version)
+                    val snapshot = snapshotFromJson(String(plain, Charsets.UTF_8), version)
                     BackupPreview(snapshot, snapshot.meals.size, snapshot.dailyEntries.size, snapshot.tummySessions.size)
                 } finally {
                     plain.fill(0)
@@ -151,6 +151,16 @@ object BackupManager {
             spec.clearPassword()
         }
     }
+
+    internal fun snapshotJson(
+        snapshot: AppSnapshot,
+        formatVersion: Int = FORMAT_VERSION,
+    ): String = snapshot.toJson(formatVersion).toString()
+
+    internal fun snapshotFromJson(
+        json: String,
+        formatVersion: Int = FORMAT_VERSION,
+    ): AppSnapshot = JSONObject(json).toSnapshot(formatVersion)
 
     private fun AppSnapshot.toJson(formatVersion: Int) =
         JSONObject().apply {

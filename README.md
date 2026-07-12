@@ -1,6 +1,6 @@
 # Bebin dnevnik
 
-Potpuno lokalna, nativna Android aplikacija za evidenciju obroka, Waya kapi, vježbanja i tummy-time sesija. Nema profila djeteta, korisničkog računa, interneta, oglasa, analitike ni telemetrije.
+Local-first, nativna Android aplikacija za evidenciju obroka, Waya kapi, vježbanja, stolice i tummy-time sesija. Nema profila djeteta, oglasa, analitike ni telemetrije. Lokalna šifrirana baza potpuno radi bez interneta; mreža se koristi samo za GitHub ažuriranja i dobrovoljnu Google Drive sigurnosnu kopiju.
 
 ## Značajke
 
@@ -12,15 +12,19 @@ Potpuno lokalna, nativna Android aplikacija za evidenciju obroka, Waya kapi, vje
 - monotona tummy-time štoperica koja se poništava čim aplikacija ode u pozadinu
 - objedinjeni, odgodivi dnevni podsjetnik putem WorkManagera
 - šifrirana, verzionirana sigurnosna kopija i transakcijski uvoz sa zamjenom podataka
+- sigurni GitHub updater koji prije instalacije provjerava SHA-256, package name, versionCode i produkcijski certifikat
+- dobrovoljni, klijentski šifrirani Google Drive `appDataFolder` backup s pet verzija
 - ZIP izvoz tri UTF-8 BOM CSV datoteke za pregled
 - svijetla, tamna i sistemska tema, pristupačne oznake i dodirne površine
 - automatski CI, API 29 emulator, potpisani GitHub Release i GitHub Pages
 
 ## Privatnost i sigurnost
 
-Manifest namjerno **nema dozvolu `INTERNET`**. Androidova automatska cloud sigurnosna kopija i prijenos podataka na drugi uređaj onemogućeni su s `allowBackup=false` i pravilima `dataExtractionRules`. Izvoz i uvoz koriste Storage Access Framework, bez dozvole pristupa cijeloj pohrani.
+Manifest ima samo mrežne dozvole potrebne za updater i dobrovoljni cloud backup (`INTERNET`, `ACCESS_NETWORK_STATE`) te `REQUEST_INSTALL_PACKAGES` za otvaranje Androidova sistemskog instalacijskog dijaloga. Androidova automatska cloud kopija i prijenos na drugi uređaj ostaju onemogućeni s `allowBackup=false`; izvoz i uvoz koriste Storage Access Framework bez pristupa cijeloj pohrani.
 
 SQLCipher baza obuhvaća obroke, dnevne statuse, tummy-time sesije i postavke. Nasumični 256-bitni ključ baze omotan je AES-256-GCM ključem iz Android Keystorea. Ako ključ ili baza nisu dostupni, aplikacija ne stvara tiho novu praznu bazu.
+
+Normalno ažuriranje preko postojeće aplikacije zadržava lokalnu bazu jer produkcijski `applicationId` ostaje `hr.bebindnevnik.app`, versionCode raste, a svaki release koristi isti certifikat SHA-256 `f1b4b84d9b0c729bd2ddf56309d581f0a541a80c822f18e69f2b3bbe659d2d5e`. Deinstalacija ipak uklanja lokalnu bazu i Android Keystore ključeve. Za vraćanje nakon deinstalacije potreban je isti Google račun i cloud-backup lozinka ili ručno izvezena `.bdk` datoteka. Deinstalacija nije postupak ažuriranja.
 
 Obavijesti sadrže samo nazive neevidentiranih kategorija, nikada sadržaj zapisa. Aplikacija ne zapisuje obroke, evidencije, lozinke ni sadržaj sigurnosne kopije u logove.
 
@@ -64,6 +68,23 @@ Datoteka `.bdk` ima binarno, verzionirano zaglavlje:
 
 Ključ se izvodi s PBKDF2-HMAC-SHA-256 i 310.000 iteracija. Lozinka se ne sprema. Sadržaj uključuje verziju aplikacije, vrijeme izvoza, sve zapise i postavke. Uvoz prvo provjerava cijelu datoteku i GCM integritet, prikazuje sažetak, a zatim u jednoj Room transakciji zamjenjuje postojeće podatke. Nepoznata verzija, pogrešna lozinka ili korupcija ne mijenjaju bazu.
 
+### Cloud format
+
+Cloud kopija `.bdc` nikada ne sadrži nešifriranu bazu, JSON, CSV, SQLCipher ključ ili Android Keystore ključ. Jedan slučajni 256-bitni DEK šifrira sadržaj s AES-256-GCM i novim nonceom za svaku kopiju. Korisnička lozinka preko PBKDF2-HMAC-SHA-256 sa 600.000 iteracija izvodi KEK koji AES-GCM-om omata DEK. Zaglavlje sadrži samo verziju formata, KDF parametre, sol, nonceove, omotani DEK, vrijeme, verzije aplikacije/baze i broj zapisa. Za automatski backup DEK je lokalno dodatno omotan zasebnim Android Keystore ključem; nakon deinstalacije vraća se samo korisničkom lozinkom.
+
+## Google Cloud Console i Drive API
+
+Cloud backup zahtijeva jednokratnu vanjsku konfiguraciju:
+
+1. U Google Cloud Console stvorite projekt i uključite **Google Drive API**.
+2. Konfigurirajte OAuth consent screen.
+3. Dodajte Android OAuth klijent za paket `hr.bebindnevnik.app` i produkcijski SHA-1 certifikata `da267ebff4a180c0a577ab71fa6357a6ceff08ac`.
+4. Dodajte Web OAuth klijent za Credential Manager / Sign in with Google.
+5. Web client ID lokalno upišite u ignorirani `local.properties` kao `GOOGLE_WEB_CLIENT_ID=...apps.googleusercontent.com`.
+6. Na GitHubu isti client ID spremite kao Actions secret `GOOGLE_WEB_CLIENT_ID`.
+
+Aplikacija traži samo scope `https://www.googleapis.com/auth/drive.appdata`. Skrivena mapa dostupna je samo ovoj aplikaciji. Ne traži pristup cijelom Driveu. Credential Manager služi za izbor računa, a Google Identity Services `AuthorizationClient` za granularno Drive dopuštenje.
+
 ## Release keystore i GitHub Secrets
 
 Generirajte vlastiti keystore; nikada ga nemojte commitati:
@@ -95,8 +116,11 @@ U repozitoriju otvorite **Settings → Secrets and variables → Actions → New
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
+- `GOOGLE_WEB_CLIENT_ID`
 
-Push oznake `v*`, primjerice `git tag v1.0.0 && git push origin v1.0.0`, pokreće sve provjere. Tek nakon uspjeha workflow dekodira keystore, gradi i provjerava potpis, objavljuje `BebinDnevnik.apk` i `BebinDnevnik.apk.sha256`, te briše privremene tajne. Bez svih tajni workflow jasno prekida i ne tvrdi da je APK potpisan.
+Push semantičke oznake, primjerice `v1.2.0`, izvodi monotoni versionCode formulom `major*1.000.000 + minor*1.000 + patch`. Workflow preuzima prethodni produkcijski APK i prekida ako novi code nije veći. Nakon builda provjerava paket `hr.bebindnevnik.app`, očekivani certifikat, versionCode i APK potpis, objavljuje `BebinDnevnik.apk`, `BebinDnevnik.apk.sha256`, broj verzije, datum i bilješke, pa briše privremeni ključ.
+
+Trajni keystore `C:\Users\lukaj\Documents\bebin-dnevnik-release.jks` mora se čuvati u najmanje dvije sigurne offline kopije. Gubitak privatnog ključa znači da se budući APK ne može instalirati preko postojeće aplikacije bez valjanog proof-of-rotation postupka.
 
 ## GitHub Pages
 

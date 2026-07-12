@@ -30,11 +30,11 @@ class MainUiTest {
 
     private fun finishOnboardingIfNeeded() {
         rule.waitUntil(timeoutMillis = 60_000) {
-            rule.onAllNodesWithText("Započni").fetchSemanticsNodes().isNotEmpty() ||
+            rule.onAllNodesWithText("Započni bez vraćanja").fetchSemanticsNodes().isNotEmpty() ||
                 rule.onAllNodesWithText("Kalendar").fetchSemanticsNodes().isNotEmpty()
         }
-        if (rule.onAllNodesWithText("Započni").fetchSemanticsNodes().isNotEmpty()) {
-            runCatching { rule.onNodeWithText("Započni").performClick() }
+        if (rule.onAllNodesWithText("Započni bez vraćanja").fetchSemanticsNodes().isNotEmpty()) {
+            runCatching { rule.onNodeWithText("Započni bez vraćanja").performClick() }
         }
         rule.waitUntil(timeoutMillis = 60_000) {
             rule.onAllNodesWithText("Kalendar").fetchSemanticsNodes().isNotEmpty()
@@ -47,7 +47,7 @@ class MainUiTest {
         rule.onNodeWithText("Prethodni", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Statistika").performClick()
         rule.onNodeWithText("7 dana").assertIsDisplayed()
-        rule.onNodeWithText("Postavke").performClick()
+        rule.onNodeWithTag("navigation-settings").performClick()
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("check-for-update"))
         rule.onNodeWithTag("check-for-update").assertIsDisplayed().assertIsEnabled()
         rule.onNode(hasScrollAction()).performScrollToNode(hasText("Podaci i sigurnosne kopije"))
@@ -76,7 +76,7 @@ class MainUiTest {
             rule.onAllNodesWithText(past.hrDate()).fetchSemanticsNodes().isNotEmpty()
         }
         rule.onNodeWithText(past.hrDate()).assertIsDisplayed()
-        rule.onNodeWithText("Postavke").performClick()
+        rule.onNodeWithTag("navigation-settings").performClick()
         rule.onNodeWithText("Danas").performClick()
         rule.onNodeWithText(past.hrDate()).assertIsDisplayed()
         rule.onNodeWithText("Dodaj obrok").performClick()

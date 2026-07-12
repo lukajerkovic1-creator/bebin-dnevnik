@@ -2,6 +2,8 @@ package hr.bebindnevnik.app
 
 import android.content.Context
 import androidx.room.Room
+import hr.bebindnevnik.app.cloud.CloudBackupPreferences
+import hr.bebindnevnik.app.cloud.CloudBackupWorker
 import hr.bebindnevnik.app.data.AppDatabase
 import hr.bebindnevnik.app.data.AppRepository
 import hr.bebindnevnik.app.notifications.NotificationHelper
@@ -35,10 +37,20 @@ class AppContainer(
                     .openHelperFactory(SupportOpenHelperFactory(passphrase.copyOf()))
                     .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
                     .build()
+            // Otvori bazu odmah: migracijska pogreška mora završiti u recovery UI-ju,
+            // a ne izgledati kao prazna aplikacija dok prvi upit ne uspije.
+            database.openHelper.writableDatabase
         } finally {
             passphrase.fill(0)
         }
-        repository = AppRepository(database)
+        repository =
+            AppRepository(database) {
+                val cloud = CloudBackupPreferences(appContext)
+                if (cloud.status().enabled) {
+                    cloud.markDirty()
+                    CloudBackupWorker.schedule(appContext)
+                }
+            }
         timerController = TimerController(repository, notifications, scope)
         scope.launch {
             repository.initialize()

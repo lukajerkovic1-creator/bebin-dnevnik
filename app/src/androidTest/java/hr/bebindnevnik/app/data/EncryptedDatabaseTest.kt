@@ -67,7 +67,8 @@ class EncryptedDatabaseTest {
 
     @Test fun repositoryMaintainsTummyNoSessionInvariantAndSettingsFlow() =
         runBlocking {
-            val repository = AppRepository(database)
+            var changed = 0
+            val repository = AppRepository(database) { changed++ }
             repository.initialize()
             val date = java.time.LocalDate.of(2026, 1, 2)
             assertTrue(repository.markNoTummy(date))
@@ -79,6 +80,7 @@ class EncryptedDatabaseTest {
             assertEquals(null, repository.summary(date).stoolCount)
             repository.updateSettings { it.copy(theme = AppTheme.TAMNA) }
             assertEquals(AppTheme.TAMNA, repository.settings.first().theme)
+            assertTrue(changed >= 5)
         }
 
     @Test fun failedReplacementTransactionPreservesExistingData() =
@@ -164,9 +166,21 @@ class EncryptedDatabaseTest {
                         object : SupportSQLiteOpenHelper.Callback(2) {
                             override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                                 db.execSQL(
+                                    "CREATE TABLE meals (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, time TEXT NOT NULL, amountMl INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)",
+                                )
+                                db.execSQL(
                                     "CREATE TABLE daily_entries (date TEXT NOT NULL PRIMARY KEY, waya TEXT NOT NULL, exercise TEXT NOT NULL, noTummyTime INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)",
                                 )
+                                db.execSQL(
+                                    "CREATE TABLE tummy_sessions (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, time TEXT NOT NULL, durationSeconds INTEGER NOT NULL, inputMethod TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)",
+                                )
+                                db.execSQL(
+                                    "CREATE TABLE settings (id INTEGER NOT NULL PRIMARY KEY, reminderEnabled INTEGER NOT NULL, reminderTime TEXT NOT NULL, theme TEXT NOT NULL, onboardingShown INTEGER NOT NULL, lastNotificationDate TEXT)",
+                                )
+                                db.execSQL("INSERT INTO meals VALUES (1, '2026-01-02', '08:00', 80, 100, 200)")
                                 db.execSQL("INSERT INTO daily_entries VALUES ('2026-01-02', 'DA', 'NE', 1, 100, 200)")
+                                db.execSQL("INSERT INTO tummy_sessions VALUES (1, '2026-01-02', '09:00', 90, 'RUCNO', 100, 200)")
+                                db.execSQL("INSERT INTO settings VALUES (1, 1, '18:00', 'TAMNA', 1, '2026-01-01')")
                             }
 
                             override fun onUpgrade(
@@ -204,6 +218,20 @@ class EncryptedDatabaseTest {
             assertEquals("NE", cursor.getString(1))
             assertEquals(1, cursor.getInt(2))
             assertTrue(cursor.isNull(3))
+        }
+        v3.writableDatabase.query("SELECT amountMl FROM meals").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(80, cursor.getInt(0))
+        }
+        v3.writableDatabase.query("SELECT durationSeconds FROM tummy_sessions").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(90, cursor.getInt(0))
+        }
+        v3.writableDatabase.query("SELECT reminderTime, theme, lastNotificationDate FROM settings").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("18:00", cursor.getString(0))
+            assertEquals("TAMNA", cursor.getString(1))
+            assertEquals("2026-01-01", cursor.getString(2))
         }
         v3.close()
         context.deleteDatabase(name)

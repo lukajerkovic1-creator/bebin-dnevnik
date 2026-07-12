@@ -29,6 +29,12 @@ class DatabaseKeyManager(
         return if (wrapped == null) createPassphrase() else unwrap(wrapped)
     }
 
+    fun resetAfterPreservingDatabase() {
+        preferences.edit(commit = true) { clear() }
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        if (store.containsAlias(keyAlias)) store.deleteEntry(keyAlias)
+    }
+
     private fun createPassphrase(): ByteArray {
         val passphrase = ByteArray(32).also(SecureRandom()::nextBytes)
         try {

@@ -1,5 +1,4 @@
 <resources>
-    <string name="app_name">Bebin dnevnik</string>
     <string name="notification_channel_reminders">Dnevni podsjetnici</string>
     <string name="notification_channel_timer">Tummy time štoperica</string>
 </resources>

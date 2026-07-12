@@ -10,6 +10,7 @@ import java.time.LocalTime
 
 class AppRepository(
     private val database: AppDatabase,
+    private val onDataChanged: () -> Unit = {},
 ) {
     private val dao = database.dao()
     val meals: Flow<List<MealEntity>> = dao.observeMeals()
@@ -30,14 +31,20 @@ class AppRepository(
         val now = System.currentTimeMillis()
         val item =
             MealEntity(date = date.toString(), time = time.withNano(0).toString(), amountMl = amount, createdAt = now, updatedAt = now)
-        return item.copy(id = dao.insertMeal(item))
+        return item.copy(id = dao.insertMeal(item)).also { onDataChanged() }
     }
 
-    suspend fun updateMeal(item: MealEntity) = dao.updateMeal(item.copy(updatedAt = System.currentTimeMillis()))
+    suspend fun updateMeal(item: MealEntity) {
+        dao.updateMeal(item.copy(updatedAt = System.currentTimeMillis()))
+        onDataChanged()
+    }
 
-    suspend fun deleteMeal(item: MealEntity) = dao.deleteMeal(item)
+    suspend fun deleteMeal(item: MealEntity) {
+        dao.deleteMeal(item)
+        onDataChanged()
+    }
 
-    suspend fun restoreMeal(item: MealEntity) = dao.insertMeal(item)
+    suspend fun restoreMeal(item: MealEntity) = dao.insertMeal(item).also { onDataChanged() }
 
     suspend fun setDailyStatus(
         date: LocalDate,
@@ -59,6 +66,7 @@ class AppRepository(
                 stoolCount = old?.stoolCount,
             ),
         )
+        onDataChanged()
     }
 
     suspend fun setStoolCount(
@@ -81,6 +89,7 @@ class AppRepository(
                 stoolCount = count,
             ),
         )
+        onDataChanged()
     }
 
     suspend fun resetDailyStatuses(date: LocalDate) {
@@ -120,7 +129,7 @@ class AppRepository(
                 setDailyStatus(date, noTummy = false)
                 dao.insertTummy(item)
             }
-        return item.copy(id = id)
+        return item.copy(id = id).also { onDataChanged() }
     }
 
     suspend fun updateTummy(item: TummySessionEntity) {
@@ -128,13 +137,20 @@ class AppRepository(
             setDailyStatus(LocalDate.parse(item.date), noTummy = false)
             dao.updateTummy(item.copy(updatedAt = System.currentTimeMillis()))
         }
+        onDataChanged()
     }
 
-    suspend fun deleteTummy(item: TummySessionEntity) = dao.deleteTummy(item)
+    suspend fun deleteTummy(item: TummySessionEntity) {
+        dao.deleteTummy(item)
+        onDataChanged()
+    }
 
-    suspend fun restoreTummy(item: TummySessionEntity) = dao.insertTummy(item)
+    suspend fun restoreTummy(item: TummySessionEntity) = dao.insertTummy(item).also { onDataChanged() }
 
-    suspend fun updateSettings(transform: (SettingsEntity) -> SettingsEntity) = dao.putSettings(transform(dao.settings() ?: SettingsEntity()))
+    suspend fun updateSettings(transform: (SettingsEntity) -> SettingsEntity) {
+        dao.putSettings(transform(dao.settings() ?: SettingsEntity()))
+        onDataChanged()
+    }
 
     suspend fun currentSnapshot(): AppSnapshot =
         AppSnapshot(
@@ -150,23 +166,25 @@ class AppRepository(
     }
 
     suspend fun replaceAll(snapshot: AppSnapshot) =
-        database.withTransaction {
-            dao.deleteAllMeals()
-            dao.deleteAllDailyEntries()
-            dao.deleteAllTummySessions()
-            dao.deleteAllSettings()
-            dao.insertMeals(snapshot.meals)
-            dao.insertDailyEntries(snapshot.dailyEntries)
-            dao.insertTummySessions(snapshot.tummySessions)
-            dao.putSettings(snapshot.settings.copy(id = 1, lastNotificationDate = null))
-        }
+        database
+            .withTransaction {
+                dao.deleteAllMeals()
+                dao.deleteAllDailyEntries()
+                dao.deleteAllTummySessions()
+                dao.deleteAllSettings()
+                dao.insertMeals(snapshot.meals)
+                dao.insertDailyEntries(snapshot.dailyEntries)
+                dao.insertTummySessions(snapshot.tummySessions)
+                dao.putSettings(snapshot.settings.copy(id = 1, lastNotificationDate = null))
+            }.also { onDataChanged() }
 
     suspend fun deleteAll() =
-        database.withTransaction {
-            dao.deleteAllMeals()
-            dao.deleteAllDailyEntries()
-            dao.deleteAllTummySessions()
-            dao.deleteAllSettings()
-            dao.putSettings(SettingsEntity(onboardingShown = true))
-        }
+        database
+            .withTransaction {
+                dao.deleteAllMeals()
+                dao.deleteAllDailyEntries()
+                dao.deleteAllTummySessions()
+                dao.deleteAllSettings()
+                dao.putSettings(SettingsEntity(onboardingShown = true))
+            }.also { onDataChanged() }
 }

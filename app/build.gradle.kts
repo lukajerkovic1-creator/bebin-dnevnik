@@ -10,6 +10,14 @@ val ktlintCli = configurations.create("ktlintCli")
 val detektCli = configurations.create("detektCli")
 val automatedVersionCode = providers.environmentVariable("RELEASE_VERSION_CODE").orNull?.toIntOrNull()
 val automatedVersionName = providers.environmentVariable("RELEASE_VERSION_NAME").orNull?.removePrefix("v")
+val localProperties =
+    Properties().apply {
+        val file = rootProject.file("local.properties")
+        if (file.exists()) file.inputStream().use(::load)
+    }
+val googleWebClientId =
+    providers.environmentVariable("GOOGLE_WEB_CLIENT_ID").orNull
+        ?: localProperties.getProperty("GOOGLE_WEB_CLIENT_ID").orEmpty()
 
 android {
     namespace = "hr.bebindnevnik.app"
@@ -19,10 +27,11 @@ android {
         applicationId = "hr.bebindnevnik.app"
         minSdk = 29
         targetSdk = 37
-        versionCode = automatedVersionCode ?: 2
+        versionCode = automatedVersionCode ?: 5
         versionName = automatedVersionName ?: "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId.replace("\"", "\\\"")}\"")
     }
 
     val keystoreFile = rootProject.file("keystore.properties")
@@ -44,8 +53,10 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            manifestPlaceholders["appLabel"] = "Bebin dnevnik – Debug"
         }
         release {
+            manifestPlaceholders["appLabel"] = "Bebin dnevnik"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -102,6 +113,10 @@ dependencies {
     implementation("androidx.sqlite:sqlite:2.7.0")
     implementation("net.zetetic:sqlcipher-android:4.17.0@aar")
     implementation("androidx.work:work-runtime:2.11.2")
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.0")
+    implementation("com.google.android.gms:play-services-auth:21.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     ktlintCli("com.pinterest.ktlint:ktlint-cli:1.8.0")
     detektCli("io.gitlab.arturbosch.detekt:detekt-cli:1.23.8")
@@ -151,4 +166,16 @@ tasks.register<JavaExec>("formatApply") {
     classpath = ktlintCli
     mainClass.set("com.pinterest.ktlint.Main")
     args("-F", "src/**/*.kt", "build.gradle.kts", "!**/build/**")
+}
+
+tasks.register("verifySafetyInvariants") {
+    group = "verification"
+    description = "Provjerava produkcijski identitet i zabranu destruktivnih Room migracija."
+    doLast {
+        check(android.defaultConfig.applicationId == "hr.bebindnevnik.app")
+        check(android.buildTypes.getByName("debug").applicationIdSuffix == ".debug")
+        val sources = fileTree("src/main/java") { include("**/*.kt") }.files.joinToString("\n") { it.readText() }
+        check("fallbackToDestructiveMigration" !in sources) { "Destruktivne Room migracije su zabranjene." }
+        check("deleteDatabase(" !in sources) { "Produkcijski kod ne smije automatski brisati bazu." }
+    }
 }
