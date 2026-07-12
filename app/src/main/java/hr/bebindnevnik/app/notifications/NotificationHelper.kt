@@ -16,7 +16,7 @@ import hr.bebindnevnik.app.R
 
 class NotificationHelper(
     private val context: Context,
-) {
+) : TimerNotifications {
     init {
         createChannels()
     }
@@ -28,7 +28,7 @@ class NotificationHelper(
         ) &&
             NotificationManagerCompat.from(context).areNotificationsEnabled()
 
-    fun showTimer() {
+    override fun showTimer() {
         if (!notificationsAllowed()) return
         val content =
             PendingIntent.getActivity(
@@ -54,7 +54,7 @@ class NotificationHelper(
         notifyIfAllowed(TIMER_ID, notification)
     }
 
-    fun cancelTimer() = NotificationManagerCompat.from(context).cancel(TIMER_ID)
+    override fun cancelTimer() = NotificationManagerCompat.from(context).cancel(TIMER_ID)
 
     fun showReminder(missing: List<String>) {
         if (!notificationsAllowed() || missing.isEmpty()) return

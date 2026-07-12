@@ -83,6 +83,29 @@ class EncryptedDatabaseTest {
             assertTrue(changed >= 5)
         }
 
+    @Test fun repositoryKeepsMultipleTimerSessionsAndRecalculatesAfterEditAndDelete() =
+        runBlocking {
+            val repository = AppRepository(database)
+            repository.initialize()
+            val date = java.time.LocalDate.of(2026, 7, 12)
+            val first = repository.addTummy(date, java.time.LocalTime.of(9, 0), 260, TummyInputMethod.STOPERICA)
+            val second = repository.addTummy(date, java.time.LocalTime.of(10, 0), 430, TummyInputMethod.STOPERICA)
+            val third = repository.addTummy(date, java.time.LocalTime.of(11, 0), 210, TummyInputMethod.STOPERICA)
+
+            assertEquals(3, setOf(first.id, second.id, third.id).size)
+            assertEquals(3, repository.summary(date).tummyCount)
+            assertEquals(900L, repository.summary(date).tummySeconds)
+
+            repository.updateTummy(second.copy(durationSeconds = 500))
+            val afterEdit = repository.tummySessions.first().filter { it.date == date.toString() }
+            assertEquals(listOf(260L, 500L, 210L), afterEdit.sortedBy { it.time }.map { it.durationSeconds })
+            assertEquals(970L, repository.summary(date).tummySeconds)
+
+            repository.deleteTummy(first)
+            assertEquals(2, repository.summary(date).tummyCount)
+            assertEquals(710L, repository.summary(date).tummySeconds)
+        }
+
     @Test fun failedReplacementTransactionPreservesExistingData() =
         runBlocking {
             val dao = database.dao()

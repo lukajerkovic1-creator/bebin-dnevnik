@@ -112,6 +112,7 @@ import hr.bebindnevnik.app.data.TummySessionEntity
 import hr.bebindnevnik.app.domain.AppLogic
 import hr.bebindnevnik.app.domain.StatisticsRange
 import hr.bebindnevnik.app.notifications.NotificationHelper
+import hr.bebindnevnik.app.notifications.TimerPhase
 import hr.bebindnevnik.app.update.ApkUpdateManager
 import hr.bebindnevnik.app.update.AppUpdate
 import hr.bebindnevnik.app.update.UpdateCheckResult
@@ -446,33 +447,48 @@ private fun TodayScreen(
         item {
             HighlightCard("tummy time" in highlight, Modifier.testTag("tummy-card")) {
                 IllustratedSectionTitle("Tummy time", BabyIllustrationKind.TUMMY)
-                Text("Ukupno danas: ${state.summary.tummySeconds.durationText()} · ${state.summary.tummyCount} sesija")
+                Text(
+                    "${if (isToday) "Ukupno danas" else "Ukupno za odabrani dan"}: " +
+                        "${state.summary.tummySeconds.durationText()} · ${tummySessionCountText(state.summary.tummyCount)}",
+                )
                 if (isToday) {
-                    Text(
-                        timer.elapsedSeconds.durationText(),
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                    )
-                    if (timer.running) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = viewModel::stopTimer, modifier = Modifier.weight(1f).height(56.dp).testTag("timer-stop")) {
-                                Icon(Icons.Default.Stop, null)
-                                Text(" Zaustavi")
+                    when (timer.phase) {
+                        TimerPhase.RUNNING -> {
+                            Text(
+                                timer.elapsedSeconds.durationText(),
+                                style = MaterialTheme.typography.displaySmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.align(Alignment.CenterHorizontally).testTag("timer-elapsed"),
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Button(onClick = viewModel::stopTimer, modifier = Modifier.weight(1f).height(56.dp).testTag("timer-stop")) {
+                                    Icon(Icons.Default.Stop, contentDescription = null)
+                                    Text("Zaustavi")
+                                }
+                                OutlinedButton(
+                                    onClick = viewModel::cancelTimer,
+                                    modifier = Modifier.weight(1f).height(56.dp).testTag("timer-cancel"),
+                                ) { Text("Poništi") }
                             }
-                            OutlinedButton(
-                                onClick = viewModel::cancelTimer,
-                                modifier = Modifier.weight(1f).height(56.dp),
-                            ) { Text("Poništi") }
                         }
-                    } else {
-                        Button(onClick = viewModel::startTimer, modifier = Modifier.fillMaxWidth().height(56.dp).testTag("timer-start")) {
-                            Icon(Icons.Default.PlayArrow, null)
-                            Text(" Pokreni")
+
+                        TimerPhase.IDLE -> {
+                            Button(onClick = viewModel::startTimer, modifier = Modifier.fillMaxWidth().height(56.dp).testTag("timer-start")) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Pokreni novu sesiju")
+                            }
+                        }
+
+                        TimerPhase.CONFIRMING -> {
+                            Unit
                         }
                     }
                 }
-                OutlinedButton(onClick = { newTummy = true }, modifier = Modifier.fillMaxWidth()) { Text("Ručni unos sesije") }
+                OutlinedButton(
+                    onClick = { newTummy = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("manual-tummy"),
+                ) { Text("Ručni unos") }
                 if (state.selectedSessions.isEmpty() && !state.summary.noTummyTime) {
                     Text("Nije evidentirano", modifier = Modifier.padding(vertical = 6.dp))
                     TextButton(
@@ -519,6 +535,29 @@ private fun TodayScreen(
             onClose = {
                 newTummy = false
                 tummyDialog = null
+            },
+        )
+    }
+    if (timer.phase == TimerPhase.CONFIRMING) {
+        AlertDialog(
+            onDismissRequest = viewModel::cancelTimer,
+            title = { Text("Spremiti tummy-time sesiju?") },
+            text = {
+                Text(
+                    if (timer.elapsedSeconds < 5) {
+                        "Sesija je kraća od 5 sekundi. Želite li je ipak spremiti?"
+                    } else {
+                        "Sesija je dulja od 60 minuta. Želite li je ipak spremiti?"
+                    },
+                )
+            },
+            confirmButton = {
+                Button(onClick = viewModel::confirmTimer, modifier = Modifier.testTag("confirm-timer-save")) {
+                    Text("Spremi")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelTimer) { Text("Odustani") }
             },
         )
     }

@@ -16,6 +16,20 @@ fun String.hrStoredTime(): String = LocalTime.parse(this).format(CroatianTimeFor
 
 fun Long.durationText(): String = "%d:%02d".format(this / 60, this % 60)
 
+fun tummySessionCountText(count: Int): String {
+    val noun =
+        if (count % 100 in 11..14) {
+            "sesija"
+        } else {
+            when (count % 10) {
+                1 -> "sesija"
+                in 2..4 -> "sesije"
+                else -> "sesija"
+            }
+        }
+    return "$count $noun"
+}
+
 fun TernaryStatus.label(): String =
     when (this) {
         TernaryStatus.NIJE_EVIDENTIRANO -> "Nije evidentirano"

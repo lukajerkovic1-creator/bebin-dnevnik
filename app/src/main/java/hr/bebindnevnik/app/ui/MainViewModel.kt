@@ -15,6 +15,9 @@ import hr.bebindnevnik.app.data.TummyInputMethod
 import hr.bebindnevnik.app.data.TummySessionEntity
 import hr.bebindnevnik.app.domain.AppLogic
 import hr.bebindnevnik.app.domain.EntryWarning
+import hr.bebindnevnik.app.notifications.TimerCancelReason
+import hr.bebindnevnik.app.notifications.TimerEvent
+import hr.bebindnevnik.app.notifications.TimerPhase
 import hr.bebindnevnik.app.notifications.TimerState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -75,17 +78,51 @@ class MainViewModel(
                 delay(30_000)
             }
         }
+        viewModelScope.launch {
+            container.timerController.events.collect { event ->
+                when (event) {
+                    is TimerEvent.Saved -> {
+                        messages.emit(UiMessage.Text("Tummy-time sesija spremljena."))
+                    }
+
+                    is TimerEvent.Cancelled -> {
+                        when (event.reason) {
+                            TimerCancelReason.DATE_CHANGED -> {
+                                messages.emit(UiMessage.Text("Aktivna tummy-time sesija poništena je zbog promjene datuma."))
+                            }
+
+                            TimerCancelReason.BACKGROUNDED -> {
+                                messages.emit(UiMessage.Text("Aktivna tummy-time sesija poništena je jer je aplikacija napustila zaslon."))
+                            }
+
+                            TimerCancelReason.USER -> {
+                                Unit
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun selectDate(date: LocalDate) {
-        if (!date.isAfter(LocalDate.now())) selectedDate.value = date
+        if (!date.isAfter(LocalDate.now())) {
+            if (date != selectedDate.value && timer.value.phase != TimerPhase.IDLE) {
+                container.timerController.cancel(TimerCancelReason.DATE_CHANGED)
+            }
+            selectedDate.value = date
+        }
     }
 
-    fun startTimer() = container.timerController.start()
+    fun startTimer() {
+        if (selectedDate.value == LocalDate.now()) container.timerController.start()
+    }
 
     fun stopTimer() = container.timerController.stopAndSave()
 
     fun cancelTimer() = container.timerController.cancel()
+
+    fun confirmTimer() = container.timerController.confirmSave()
 
     fun onBackgrounded() = container.timerController.onBackgrounded()
 

@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.Lifecycle
 import hr.bebindnevnik.app.MainActivity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.time.LocalDate
@@ -101,6 +102,26 @@ class MainUiTest {
         rule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("tummy-card"))
         rule.onNodeWithTag("timer-start").assertIsDisplayed()
+    }
+
+    @Test fun timerCanSaveRepeatedSessionsAndIsUnavailableForPastDates() {
+        finishOnboardingIfNeeded()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("tummy-card"))
+        repeat(3) {
+            rule.onNodeWithTag("timer-start").assertIsDisplayed().performClick()
+            rule.onNodeWithTag("timer-stop").assertIsDisplayed().performClick()
+            rule.onNodeWithTag("confirm-timer-save").assertIsDisplayed().performClick()
+            rule.waitUntil(timeoutMillis = 10_000) {
+                rule.onAllNodesWithTag("timer-start").fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        rule.onNodeWithText("Pokreni novu sesiju").assertIsDisplayed()
+
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("previous-day"))
+        rule.onNodeWithTag("previous-day").performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("tummy-card"))
+        assertTrue(rule.onAllNodesWithTag("timer-start").fetchSemanticsNodes().isEmpty())
+        rule.onNodeWithTag("manual-tummy").assertIsDisplayed()
     }
 
     @Test fun accessibilityDescriptionsExistForEditAndDeleteAfterDataEntry() {
