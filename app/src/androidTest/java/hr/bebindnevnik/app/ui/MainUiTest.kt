@@ -121,6 +121,9 @@ class MainUiTest {
         rule.onNodeWithTag("edit-stool").performClick()
         rule.onNodeWithTag("stool-0").performClick()
         rule.onNodeWithTag("save-stool").performClick()
+        rule.waitUntil(timeoutMillis = 10_000) {
+            rule.onAllNodesWithText("Trenutačno: 0 stolica").fetchSemanticsNodes().isNotEmpty()
+        }
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("stool-card"))
         rule.onNodeWithText("Trenutačno: 0 stolica").assertIsDisplayed()
 
@@ -130,6 +133,9 @@ class MainUiTest {
         rule.onNodeWithTag("edit-stool").performClick()
         rule.onNodeWithTag("stool-3").performClick()
         rule.onNodeWithTag("save-stool").performClick()
+        rule.waitUntil(timeoutMillis = 10_000) {
+            rule.onAllNodesWithText("Trenutačno: 3 stolice").fetchSemanticsNodes().isNotEmpty()
+        }
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("stool-card"))
         rule.onNodeWithText("Trenutačno: 3 stolice").assertIsDisplayed()
     }
