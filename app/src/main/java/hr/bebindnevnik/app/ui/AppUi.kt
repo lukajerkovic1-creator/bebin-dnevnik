@@ -1302,7 +1302,6 @@ private fun AppUpdateSettingsCard(
     val manager = remember { ApkUpdateManager(context) }
     val preferences = remember { context.getSharedPreferences("update_status", android.content.Context.MODE_PRIVATE) }
     var checking by remember { mutableStateOf(false) }
-    var available by remember { mutableStateOf<AppUpdate?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var progress by remember { mutableIntStateOf(0) }
     var downloading by remember { mutableStateOf(false) }
@@ -1327,6 +1326,33 @@ private fun AppUpdateSettingsCard(
             unknownSourceLauncher.launch(manager.unknownSourcesIntent())
         }
     }
+
+    suspend fun downloadAndInstall(update: AppUpdate) {
+        downloading = true
+        progress = 0
+        message = "Pronađena je verzija ${update.versionName}. Preuzimanje je pokrenuto."
+        val token = AtomicBoolean(false)
+        cancellation = token
+        try {
+            val file = manager.downloadAndVerify(update, token) { progress = it }
+            withContext(Dispatchers.IO) { LocalSafetyBackup.create(context, viewModel.snapshot()) }
+            CloudBackupPreferences(context).let { cloud ->
+                if (cloud.status().enabled) {
+                    cloud.markDirty()
+                    CloudBackupWorker.schedule(context, delaySeconds = 0, replace = true)
+                }
+            }
+            preparedFile = file
+            message = "APK je preuzet i sve sigurnosne provjere su prošle."
+            startInstaller(file)
+        } catch (error: Exception) {
+            message = error.message ?: "Preuzimanje nije uspjelo. Pokušajte ponovno."
+        } finally {
+            downloading = false
+            cancellation = null
+        }
+    }
+
     SettingsCard("Ažuriranje aplikacije") {
         Row(
             Modifier.fillMaxWidth(),
@@ -1346,9 +1372,19 @@ private fun AppUpdateSettingsCard(
                 message = null
                 scope.launch {
                     when (val result = UpdateChecker.check()) {
-                        is UpdateCheckResult.Available -> available = result.update
-                        is UpdateCheckResult.Current -> message = "Imate najnoviju verziju (${result.latestVersionName})."
-                        is UpdateCheckResult.Failed -> message = result.message
+                        is UpdateCheckResult.Available -> {
+                            checking = false
+                            downloadAndInstall(result.update)
+                        }
+
+                        is UpdateCheckResult.Current -> {
+                            message =
+                                "Na GitHubu još nije objavljena novija verzija od ${result.latestVersionName}."
+                        }
+
+                        is UpdateCheckResult.Failed -> {
+                            message = result.message
+                        }
                     }
                     lastCheck =
                         java.time.ZonedDateTime
@@ -1361,14 +1397,20 @@ private fun AppUpdateSettingsCard(
                     checking = false
                 }
             },
-            enabled = !checking,
+            enabled = !checking && !downloading,
             modifier = Modifier.fillMaxWidth().heightIn(min = BabyDimensions.TouchTarget).testTag("check-for-update"),
         ) {
             if (checking) {
                 CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                 Spacer(Modifier.width(10.dp))
             }
-            Text(if (checking) "Provjeravam…" else "Provjeri ažuriranja")
+            Text(
+                when {
+                    checking -> "Provjeravam…"
+                    downloading -> "Preuzimam…"
+                    else -> "Provjeri i preuzmi novu verziju"
+                },
+            )
         }
         if (downloading) {
             androidx.compose.material3.LinearProgressIndicator({ progress / 100f }, Modifier.fillMaxWidth())
@@ -1382,50 +1424,6 @@ private fun AppUpdateSettingsCard(
             "Aplikacija provjerava službeni GitHub Release. Prije instalacije provjerava SHA-256, paket, verziju i potpis.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    available?.let { update ->
-        AlertDialog(
-            onDismissRequest = { available = null },
-            icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null) },
-            title = { Text("Dostupna je verzija ${update.versionName}") },
-            text = {
-                Text(
-                    update.releaseNotes.ifBlank {
-                        "Nova verzija spremna je za preuzimanje. Android će zatražiti potvrdu ažuriranja."
-                    },
-                )
-            },
-            confirmButton = {
-                Button(onClick = {
-                    downloading = true
-                    progress = 0
-                    val token = AtomicBoolean(false)
-                    cancellation = token
-                    scope.launch {
-                        try {
-                            val file = manager.downloadAndVerify(update, token) { progress = it }
-                            withContext(Dispatchers.IO) { LocalSafetyBackup.create(context, viewModel.snapshot()) }
-                            CloudBackupPreferences(context).let { cloud ->
-                                if (cloud.status().enabled) {
-                                    cloud.markDirty()
-                                    CloudBackupWorker.schedule(context, delaySeconds = 0, replace = true)
-                                }
-                            }
-                            preparedFile = file
-                            message = "APK je preuzet i sve sigurnosne provjere su prošle."
-                            startInstaller(file)
-                            available = null
-                        } catch (error: Exception) {
-                            message = error.message ?: "Preuzimanje nije uspjelo. Pokušajte ponovno."
-                        } finally {
-                            downloading = false
-                            cancellation = null
-                        }
-                    }
-                }, enabled = !downloading) { Text("Preuzmi i instaliraj") }
-            },
-            dismissButton = { TextButton(onClick = { available = null }) { Text("Kasnije") } },
         )
     }
 }

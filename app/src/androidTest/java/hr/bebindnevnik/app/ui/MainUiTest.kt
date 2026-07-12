@@ -51,6 +51,7 @@ class MainUiTest {
         rule.onNodeWithTag("navigation-settings").performClick()
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("check-for-update"))
         rule.onNodeWithTag("check-for-update").assertIsDisplayed().assertIsEnabled()
+        rule.onNodeWithText("Provjeri i preuzmi novu verziju").assertIsDisplayed()
         rule.onNode(hasScrollAction()).performScrollToNode(hasText("Podaci i sigurnosne kopije"))
         rule.onNodeWithText("Podaci i sigurnosne kopije").assertIsDisplayed()
         rule.onNodeWithText("Danas").performClick()
