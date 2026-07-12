@@ -117,7 +117,7 @@ jobs:
           APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
           AAPT="$ANDROID_HOME/build-tools/37.0.0/aapt"
           "$APKSIGNER" verify --verbose --print-certs BebinDnevnik.apk | tee signing.txt
-          CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signing.txt | tr 'A-F' 'a-f')"
+          CERT="$(sed -n 's/^.*certificate SHA-256 digest: //p' signing.txt | head -1 | tr 'A-F' 'a-f')"
           [ "$CERT" = "$EXPECTED_CERT_SHA256" ] || { echo 'Produkcijski certifikat nije očekivani certifikat.'; exit 1; }
           BADGING="$($AAPT dump badging BebinDnevnik.apk | head -1)"
           PACKAGE="$(sed -n "s/package: name='\([^']*\)'.*/\1/p" <<< "$BADGING")"
