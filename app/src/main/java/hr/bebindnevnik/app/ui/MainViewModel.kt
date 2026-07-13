@@ -15,16 +15,22 @@ import hr.bebindnevnik.app.data.TummyInputMethod
 import hr.bebindnevnik.app.data.TummySessionEntity
 import hr.bebindnevnik.app.domain.AppLogic
 import hr.bebindnevnik.app.domain.EntryWarning
+import hr.bebindnevnik.app.domain.StatisticsCalculator
+import hr.bebindnevnik.app.domain.StatisticsReport
+import hr.bebindnevnik.app.domain.StatisticsSelection
 import hr.bebindnevnik.app.notifications.TimerCancelReason
 import hr.bebindnevnik.app.notifications.TimerEvent
 import hr.bebindnevnik.app.notifications.TimerPhase
 import hr.bebindnevnik.app.notifications.TimerState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -61,15 +67,33 @@ class MainViewModel(
     private val container: AppContainer,
 ) : ViewModel() {
     private val selectedDate = MutableStateFlow(LocalDate.now())
+    private val mutableStatisticsSelection = MutableStateFlow(StatisticsSelection())
     private val minute = MutableStateFlow(System.currentTimeMillis() / 60_000)
     val messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 4)
     val highlight = MutableStateFlow<Set<String>>(emptySet())
     val timer: StateFlow<TimerState> = container.timerController.state
+    val statisticsSelection: StateFlow<StatisticsSelection> = mutableStatisticsSelection.asStateFlow()
 
     val state: StateFlow<UiState> =
         combine(container.repository.snapshot, selectedDate, minute) { snapshot, date, tick ->
             UiState(snapshot.meals, snapshot.dailyEntries, snapshot.tummySessions, snapshot.settings, date, tick)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
+
+    val statisticsReport: StateFlow<StatisticsReport> =
+        combine(container.repository.snapshot, mutableStatisticsSelection) { snapshot, selection ->
+            StatisticsCalculator.calculate(
+                selection = selection,
+                today = LocalDate.now(),
+                meals = snapshot.meals,
+                entries = snapshot.dailyEntries,
+                sessions = snapshot.tummySessions,
+            )
+        }.flowOn(Dispatchers.Default)
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                StatisticsCalculator.calculate(StatisticsSelection(), LocalDate.now(), emptyList(), emptyList(), emptyList()),
+            )
 
     init {
         viewModelScope.launch {
@@ -112,6 +136,10 @@ class MainViewModel(
             }
             selectedDate.value = date
         }
+    }
+
+    fun selectStatisticsRange(selection: StatisticsSelection) {
+        mutableStatisticsSelection.value = selection
     }
 
     fun startTimer() {

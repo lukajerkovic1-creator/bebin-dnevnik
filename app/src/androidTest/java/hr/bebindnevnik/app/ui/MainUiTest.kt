@@ -47,7 +47,7 @@ class MainUiTest {
         rule.onNodeWithText("Kalendar").performClick()
         rule.onNodeWithText("Prethodni", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Statistika").performClick()
-        rule.onNodeWithText("7 dana").assertIsDisplayed()
+        rule.onNodeWithTag("statistics-period-seven_days").assertIsDisplayed()
         rule.onNodeWithTag("navigation-settings").performClick()
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("check-for-update"))
         rule.onNodeWithTag("check-for-update").assertIsDisplayed().assertIsEnabled()

@@ -150,6 +150,8 @@ fun BebinDnevnikApp(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val timer by viewModel.timer.collectAsStateWithLifecycle()
     val highlight by viewModel.highlight.collectAsStateWithLifecycle()
+    val statisticsReport by viewModel.statisticsReport.collectAsStateWithLifecycle()
+    val statisticsSelection by viewModel.statisticsSelection.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -257,7 +259,17 @@ fun BebinDnevnikApp(
                     navController.navigate("today")
                 }
             }
-            composable("statistics") { StatisticsScreen(state) }
+            composable("statistics") {
+                EnhancedStatisticsScreen(
+                    report = statisticsReport,
+                    selection = statisticsSelection,
+                    onSelectionChange = viewModel::selectStatisticsRange,
+                    onOpenDay = { date ->
+                        viewModel.selectDate(date)
+                        navController.navigate("today")
+                    },
+                )
+            }
             composable("settings") {
                 SettingsScreen(state, viewModel, notifications, onExplainPermission = { notificationExplanation = true })
             }
@@ -871,6 +883,7 @@ private fun CalendarScreen(
 private enum class StatsPeriod { SEVEN, THIRTY, ALL }
 
 @Composable
+@Suppress("UnusedPrivateMember") // Kept temporarily as a compact fallback while the enhanced screen is exercised by release tests.
 private fun StatisticsScreen(state: UiState) {
     var period by rememberSaveable { mutableStateOf(StatsPeriod.SEVEN) }
     val today = LocalDate.now()
