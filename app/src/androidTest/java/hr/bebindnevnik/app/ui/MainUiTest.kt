@@ -30,15 +30,27 @@ class MainUiTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
     private fun finishOnboardingIfNeeded() {
+        var onboardingFinished = false
         rule.waitUntil(timeoutMillis = 60_000) {
             rule.onAllNodesWithText("Započni bez vraćanja").fetchSemanticsNodes().isNotEmpty() ||
                 rule.onAllNodesWithText("Kalendar").fetchSemanticsNodes().isNotEmpty()
         }
         if (rule.onAllNodesWithText("Započni bez vraćanja").fetchSemanticsNodes().isNotEmpty()) {
             runCatching { rule.onNodeWithText("Započni bez vraćanja").performClick() }
+            onboardingFinished = true
         }
         rule.waitUntil(timeoutMillis = 60_000) {
             rule.onAllNodesWithText("Kalendar").fetchSemanticsNodes().isNotEmpty()
+        }
+        if (onboardingFinished) {
+            runCatching {
+                rule.waitUntil(timeoutMillis = 3_000) {
+                    rule.onAllNodesWithText("Ne sada").fetchSemanticsNodes().isNotEmpty()
+                }
+            }
+        }
+        if (rule.onAllNodesWithText("Ne sada").fetchSemanticsNodes().isNotEmpty()) {
+            rule.onNodeWithText("Ne sada").performClick()
         }
     }
 
@@ -68,7 +80,7 @@ class MainUiTest {
         rule.onNodeWithText("Odustani").performClick()
     }
 
-    @Test fun selectedPastDateSurvivesBottomNavigationAndNewMealUsesIt() {
+    @Test fun selectedPastDateSurvivesRecreationAndRelocksAfterBottomNavigation() {
         finishOnboardingIfNeeded()
         val past = LocalDate.now().minusDays(1)
         rule.onNodeWithTag("previous-day").performClick()
@@ -81,7 +93,14 @@ class MainUiTest {
         rule.onNodeWithTag("navigation-settings").performClick()
         rule.onNodeWithText("Danas").performClick()
         rule.onNodeWithText(past.hrDate()).assertIsDisplayed()
-        rule.onNodeWithText("Dodaj obrok").performClick()
+        rule.onNodeWithTag("past-day-locked").assertIsDisplayed()
+        rule.onNodeWithTag("unlock-past-day").performClick()
+        rule.onNodeWithTag("confirm-unlock-past-day").performClick()
+        rule.onNodeWithTag("past-day-edit-mode").assertIsDisplayed()
+        rule.onNodeWithText("Dodaj obrok").performScrollTo().performClick()
+        rule.waitUntil(timeoutMillis = 10_000) {
+            rule.onAllNodesWithTag("date-row").fetchSemanticsNodes().isNotEmpty()
+        }
         rule.onNodeWithTag("date-row").assertTextContains(past.hrDate())
         rule.onNodeWithText("Odustani").performClick()
         rule.onNodeWithTag("go-today").performClick()
@@ -122,7 +141,13 @@ class MainUiTest {
         rule.onNodeWithTag("previous-day").performClick()
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("tummy-card"))
         assertTrue(rule.onAllNodesWithTag("timer-start").fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodesWithTag("manual-tummy").fetchSemanticsNodes().isEmpty())
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("past-day-locked"))
+        rule.onNodeWithTag("unlock-past-day").performClick()
+        rule.onNodeWithTag("confirm-unlock-past-day").performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("tummy-card"))
         rule.onNodeWithTag("manual-tummy").assertIsDisplayed()
+        assertTrue(rule.onAllNodesWithTag("timer-start").fetchSemanticsNodes().isEmpty())
     }
 
     @Test fun accessibilityDescriptionsExistForEditAndDeleteAfterDataEntry() {
@@ -151,6 +176,10 @@ class MainUiTest {
 
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("previous-day"))
         rule.onNodeWithTag("previous-day").performClick()
+        rule.onNodeWithTag("past-day-locked").assertIsDisplayed()
+        assertTrue(rule.onAllNodesWithTag("edit-stool").fetchSemanticsNodes().isEmpty())
+        rule.onNodeWithTag("unlock-past-day").performClick()
+        rule.onNodeWithTag("confirm-unlock-past-day").performClick()
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("stool-card"))
         rule.onNodeWithTag("edit-stool").performClick()
         rule.onNodeWithTag("stool-3").performClick()
@@ -160,5 +189,23 @@ class MainUiTest {
         }
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("stool-card"))
         rule.onNodeWithText("Trenutačno: 3 stolice").assertIsDisplayed()
+    }
+
+    @Test fun pastDayUnlockDialogCanBeCancelledAndDateChangeRelocks() {
+        finishOnboardingIfNeeded()
+        rule.onNodeWithTag("previous-day").performClick()
+        rule.onNodeWithTag("past-day-locked").assertIsDisplayed()
+        assertTrue(rule.onAllNodesWithTag("add-meal").fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodesWithTag("manual-tummy").fetchSemanticsNodes().isEmpty())
+
+        rule.onNodeWithTag("unlock-past-day").performClick()
+        rule.onNodeWithText("Odustani").performClick()
+        rule.onNodeWithTag("past-day-locked").assertIsDisplayed()
+
+        rule.onNodeWithTag("unlock-past-day").performClick()
+        rule.onNodeWithTag("confirm-unlock-past-day").performClick()
+        rule.onNodeWithTag("past-day-edit-mode").assertIsDisplayed()
+        rule.onNodeWithTag("previous-day").performClick()
+        rule.onNodeWithTag("past-day-locked").assertIsDisplayed()
     }
 }

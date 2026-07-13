@@ -24,6 +24,8 @@ enum class TimerCancelReason { USER, DATE_CHANGED, BACKGROUNDED }
 data class TimerState(
     val phase: TimerPhase = TimerPhase.IDLE,
     val elapsedSeconds: Long = 0,
+    val crossedMidnight: Boolean = false,
+    val sessionDate: LocalDate? = null,
 ) {
     val running: Boolean get() = phase == TimerPhase.RUNNING
 }
@@ -123,6 +125,23 @@ class TimerController internal constructor(
     }
 
     fun onBackgrounded() = cancel(TimerCancelReason.BACKGROUNDED)
+
+    /** Stops at the day boundary and waits for an explicit save/discard decision. */
+    fun onLocalDateChanged(newDate: LocalDate) {
+        synchronized(lock) {
+            if (mutableState.value.phase != TimerPhase.RUNNING || startedDate == null || startedDate == newDate) return
+            val pending = pendingFromRunning()
+            stopTickerAndNotification()
+            pendingSession = pending
+            mutableState.value =
+                TimerState(
+                    phase = TimerPhase.CONFIRMING,
+                    elapsedSeconds = pending.durationSeconds,
+                    crossedMidnight = true,
+                    sessionDate = pending.date,
+                )
+        }
+    }
 
     private suspend fun runTicker() {
         while (true) {
