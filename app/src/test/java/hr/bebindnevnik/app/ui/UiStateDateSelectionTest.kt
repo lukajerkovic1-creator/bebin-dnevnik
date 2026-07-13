@@ -6,6 +6,8 @@ import hr.bebindnevnik.app.data.TernaryStatus
 import hr.bebindnevnik.app.data.TummyInputMethod
 import hr.bebindnevnik.app.data.TummySessionEntity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 
@@ -41,5 +43,15 @@ class UiStateDateSelectionTest {
         assertEquals(0, todayState.summary.tummyCount)
         assertEquals(TernaryStatus.NE, todayState.summary.waya)
         assertEquals(0, todayState.summary.stoolCount)
+    }
+
+    @Test fun `past date is locked by default and only selected edit mode unlocks it`() {
+        val today = LocalDate.of(2026, 7, 13)
+        val locked = UiState(selectedDate = today.minusDays(1), currentLocalDate = today)
+
+        assertTrue(locked.isPastDate)
+        assertFalse(locked.canEditSelectedDate)
+        assertTrue(locked.copy(pastDateEditMode = true).canEditSelectedDate)
+        assertFalse(locked.copy(selectedDate = today.plusDays(1), pastDateEditMode = true).canEditSelectedDate)
     }
 }

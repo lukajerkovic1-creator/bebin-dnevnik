@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.FilterChip
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import hr.bebindnevnik.app.data.MealEntity
 import hr.bebindnevnik.app.data.TummySessionEntity
 import hr.bebindnevnik.app.domain.EntryDateTimeRules
@@ -61,6 +63,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 @Composable
+@Suppress("CyclomaticComplexMethod")
 internal fun MealEditorSheet(
     item: MealEntity?,
     defaultDate: LocalDate? = null,
@@ -68,6 +71,7 @@ internal fun MealEditorSheet(
     onSave: (Long, LocalDate, LocalTime, Int) -> Unit,
     onClose: () -> Unit,
     clock: Clock = Clock.systemDefaultZone(),
+    rolloverPreviousDate: LocalDate? = null,
 ) {
     val initialDate = remember(item?.id, defaultDate, clock) { initialEntryDate(item?.date, defaultDate, clock) }
     val initialTime = remember(item?.id, clock) { item?.time?.let(LocalTime::parse) ?: LocalTime.now(clock).withSecond(0).withNano(0) }
@@ -83,6 +87,14 @@ internal fun MealEditorSheet(
     val displayedAmountError = amountError?.takeIf { amountInteracted }
     val dateTimeError = EntryDateTimeRules.validate(date, time, clock)?.let(EntryDateTimeRules::message)
     val canSave = amountError == null && dateTimeError == null
+
+    LaunchedEffect(rolloverPreviousDate) {
+        if (rolloverPreviousDate != null) {
+            showDatePicker = false
+            showTimePicker = false
+            warnings = emptySet()
+        }
+    }
 
     fun attemptSave(confirmed: Boolean = false) {
         val parsedAmount = amount.toIntOrNull()
@@ -106,63 +118,65 @@ internal fun MealEditorSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onClose,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.testTag("meal-editor"),
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .imePadding()
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+    if (rolloverPreviousDate == null) {
+        ModalBottomSheet(
+            onDismissRequest = onClose,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.testTag("meal-editor"),
         ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    if (item == null) "Novi obrok" else "Uredi obrok",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        if (item == null) "Novi obrok" else "Uredi obrok",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    BabyIllustration(BabyIllustrationKind.BOTTLE, Modifier.size(BabyDimensions.IllustrationSmall))
+                }
+                Text("Brzi odabir količine", style = MaterialTheme.typography.titleMedium)
+                QuantityQuickSelect(
+                    amount = amount,
+                    onAmountSelected = {
+                        amount = it.toString()
+                        amountInteracted = true
+                    },
                 )
-                BabyIllustration(BabyIllustrationKind.BOTTLE, Modifier.size(BabyDimensions.IllustrationSmall))
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { value ->
+                        amount = value.filter(Char::isDigit)
+                        amountInteracted = true
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("meal-amount"),
+                    label = { Text("Količina") },
+                    suffix = { Text("ml") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    isError = displayedAmountError != null,
+                    supportingText = displayedAmountError?.let { message -> ({ Text(message) }) },
+                )
+                DateTimeSelectionRows(date, time, { showDatePicker = true }, { showTimePicker = true })
+                dateTimeError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("date-time-error")) }
+                saveError?.takeIf { it != dateTimeError && it != amountError }?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+                EditorActions(onClose = onClose, onSave = { attemptSave() }, saveEnabled = canSave)
             }
-            Text("Brzi odabir količine", style = MaterialTheme.typography.titleMedium)
-            QuantityQuickSelect(
-                amount = amount,
-                onAmountSelected = {
-                    amount = it.toString()
-                    amountInteracted = true
-                },
-            )
-            OutlinedTextField(
-                value = amount,
-                onValueChange = { value ->
-                    amount = value.filter(Char::isDigit)
-                    amountInteracted = true
-                },
-                modifier = Modifier.fillMaxWidth().testTag("meal-amount"),
-                label = { Text("Količina") },
-                suffix = { Text("ml") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
-                isError = displayedAmountError != null,
-                supportingText = displayedAmountError?.let { message -> ({ Text(message) }) },
-            )
-            DateTimeSelectionRows(date, time, { showDatePicker = true }, { showTimePicker = true })
-            dateTimeError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("date-time-error")) }
-            saveError?.takeIf { it != dateTimeError && it != amountError }?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-            }
-            EditorActions(onClose = onClose, onSave = { attemptSave() }, saveEnabled = canSave)
         }
     }
     if (showDatePicker) {
@@ -187,9 +201,13 @@ internal fun MealEditorSheet(
     if (warnings.isNotEmpty()) {
         EntryWarningDialog(warnings.joinToString("\n") { warningLabelForEditor(it) }, { attemptSave(true) }, { warnings = emptySet() })
     }
+    rolloverPreviousDate?.let { previousDate ->
+        MidnightDraftDialog(previousDate, { attemptSave(true) }, onClose)
+    }
 }
 
 @Composable
+@Suppress("CyclomaticComplexMethod")
 internal fun TummyEditorSheet(
     item: TummySessionEntity?,
     defaultDate: LocalDate? = null,
@@ -197,6 +215,7 @@ internal fun TummyEditorSheet(
     onSave: (Long, LocalDate, LocalTime, Long) -> Unit,
     onClose: () -> Unit,
     clock: Clock = Clock.systemDefaultZone(),
+    rolloverPreviousDate: LocalDate? = null,
 ) {
     val initialDate = remember(item?.id, defaultDate, clock) { initialEntryDate(item?.date, defaultDate, clock) }
     val initialTime = remember(item?.id, clock) { item?.time?.let(LocalTime::parse) ?: LocalTime.now(clock).withSecond(0).withNano(0) }
@@ -211,6 +230,14 @@ internal fun TummyEditorSheet(
     val duration = durationOrNull(minutes, seconds)
     val dateTimeError = EntryDateTimeRules.validate(date, time, clock)?.let(EntryDateTimeRules::message)
     val durationError = if (duration == null) "Unesite cijelo nenegativno trajanje." else null
+
+    LaunchedEffect(rolloverPreviousDate) {
+        if (rolloverPreviousDate != null) {
+            showDatePicker = false
+            showTimePicker = false
+            warnings = emptySet()
+        }
+    }
 
     fun attemptSave(confirmed: Boolean = false) {
         val parsedDuration = durationOrNull(minutes, seconds)
@@ -233,46 +260,48 @@ internal fun TummyEditorSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onClose,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.testTag("tummy-editor"),
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .imePadding()
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+    if (rolloverPreviousDate == null) {
+        ModalBottomSheet(
+            onDismissRequest = onClose,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.testTag("tummy-editor"),
         ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    if (item == null) "Ručni unos tummy timea" else "Uredi tummy time",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                BabyIllustration(BabyIllustrationKind.TUMMY, Modifier.size(BabyDimensions.IllustrationSmall))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        if (item == null) "Ručni unos tummy timea" else "Uredi tummy time",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    BabyIllustration(BabyIllustrationKind.TUMMY, Modifier.size(BabyDimensions.IllustrationSmall))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DurationField("Minute", minutes, { minutes = it.filter(Char::isDigit) }, Modifier.weight(1f), "tummy-minutes")
+                    DurationField("Sekunde", seconds, { seconds = it.filter(Char::isDigit) }, Modifier.weight(1f), "tummy-seconds")
+                }
+                durationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                DateTimeSelectionRows(date, time, { showDatePicker = true }, { showTimePicker = true })
+                dateTimeError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("date-time-error")) }
+                saveError?.takeIf { it != dateTimeError && it != durationError }?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+                EditorActions(onClose = onClose, onSave = { attemptSave() }, saveEnabled = duration != null && dateTimeError == null)
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                DurationField("Minute", minutes, { minutes = it.filter(Char::isDigit) }, Modifier.weight(1f), "tummy-minutes")
-                DurationField("Sekunde", seconds, { seconds = it.filter(Char::isDigit) }, Modifier.weight(1f), "tummy-seconds")
-            }
-            durationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            DateTimeSelectionRows(date, time, { showDatePicker = true }, { showTimePicker = true })
-            dateTimeError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("date-time-error")) }
-            saveError?.takeIf { it != dateTimeError && it != durationError }?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-            }
-            EditorActions(onClose = onClose, onSave = { attemptSave() }, saveEnabled = duration != null && dateTimeError == null)
         }
     }
     if (showDatePicker) {
@@ -296,6 +325,36 @@ internal fun TummyEditorSheet(
     }
     if (warnings.isNotEmpty()) {
         EntryWarningDialog(warnings.joinToString("\n") { warningLabelForEditor(it) }, { attemptSave(true) }, { warnings = emptySet() })
+    }
+    rolloverPreviousDate?.let { previousDate ->
+        MidnightDraftDialog(previousDate, { attemptSave(true) }, onClose)
+    }
+}
+
+@Composable
+internal fun MidnightDraftDialog(
+    previousDate: LocalDate,
+    save: () -> Unit,
+    discard: () -> Unit,
+) {
+    Dialog(onDismissRequest = {}) {
+        Card(Modifier.fillMaxWidth().padding(12.dp)) {
+            Column(
+                Modifier.fillMaxWidth().padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Počeo je novi dan", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Imate nespremljene podatke za ${previousDate.hrDate()}")
+                Button(
+                    onClick = save,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("save-midnight-draft"),
+                ) { Text("Spremi za prethodni dan") }
+                TextButton(
+                    onClick = discard,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("discard-midnight-draft"),
+                ) { Text("Odbaci") }
+            }
+        }
     }
 }
 

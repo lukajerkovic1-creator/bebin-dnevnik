@@ -15,14 +15,17 @@ import hr.bebindnevnik.app.data.TummyInputMethod
 import hr.bebindnevnik.app.data.TummySessionEntity
 import hr.bebindnevnik.app.domain.AppLogic
 import hr.bebindnevnik.app.domain.EntryWarning
+import hr.bebindnevnik.app.domain.LocalDayClock
 import hr.bebindnevnik.app.domain.StatisticsCalculator
 import hr.bebindnevnik.app.domain.StatisticsReport
 import hr.bebindnevnik.app.domain.StatisticsSelection
+import hr.bebindnevnik.app.domain.resolveLocalDayTransition
 import hr.bebindnevnik.app.notifications.TimerCancelReason
 import hr.bebindnevnik.app.notifications.TimerEvent
 import hr.bebindnevnik.app.notifications.TimerPhase
 import hr.bebindnevnik.app.notifications.TimerState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,11 +45,17 @@ data class UiState(
     val sessions: List<TummySessionEntity> = emptyList(),
     val settings: SettingsEntity = SettingsEntity(),
     val selectedDate: LocalDate = LocalDate.now(),
+    val currentLocalDate: LocalDate = LocalDate.now(),
+    val pastDateEditMode: Boolean = false,
+    val rolloverPreviousDate: LocalDate? = null,
     val nowMinute: Long = 0,
 ) {
     val selectedMeals get() = meals.filter { it.date == selectedDate.toString() }
     val selectedSessions get() = sessions.filter { it.date == selectedDate.toString() }
     val summary: DaySummary get() = AppLogic.summary(selectedDate, meals, entries, sessions)
+    val isPastDate: Boolean get() = selectedDate.isBefore(currentLocalDate)
+    val isFutureDate: Boolean get() = selectedDate.isAfter(currentLocalDate)
+    val canEditSelectedDate: Boolean get() = !isFutureDate && (!isPastDate || pastDateEditMode)
 }
 
 sealed interface UiMessage {
@@ -63,27 +72,53 @@ sealed interface UiMessage {
     ) : UiMessage
 }
 
+@Suppress("TooManyFunctions")
 class MainViewModel(
     private val container: AppContainer,
+    private val localDayClock: LocalDayClock = LocalDayClock(),
 ) : ViewModel() {
-    private val selectedDate = MutableStateFlow(LocalDate.now())
+    private val currentLocalDate = MutableStateFlow(localDayClock.today())
+    private val selectedDate = MutableStateFlow(currentLocalDate.value)
+    private val pastDateEditMode = MutableStateFlow(false)
+    private val rolloverPreviousDate = MutableStateFlow<LocalDate?>(null)
+    private val editorOpen = MutableStateFlow(false)
+    private val editorDate = MutableStateFlow<LocalDate?>(null)
     private val mutableStatisticsSelection = MutableStateFlow(StatisticsSelection())
     private val minute = MutableStateFlow(System.currentTimeMillis() / 60_000)
+    private var midnightJob: Job? = null
     val messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 4)
     val highlight = MutableStateFlow<Set<String>>(emptySet())
     val timer: StateFlow<TimerState> = container.timerController.state
     val statisticsSelection: StateFlow<StatisticsSelection> = mutableStatisticsSelection.asStateFlow()
 
     val state: StateFlow<UiState> =
-        combine(container.repository.snapshot, selectedDate, minute) { snapshot, date, tick ->
-            UiState(snapshot.meals, snapshot.dailyEntries, snapshot.tummySessions, snapshot.settings, date, tick)
+        combine(
+            container.repository.snapshot,
+            selectedDate,
+            currentLocalDate,
+            pastDateEditMode,
+            rolloverPreviousDate,
+            minute,
+        ) { values ->
+            val snapshot = values[0] as AppSnapshot
+            UiState(
+                meals = snapshot.meals,
+                entries = snapshot.dailyEntries,
+                sessions = snapshot.tummySessions,
+                settings = snapshot.settings,
+                selectedDate = values[1] as LocalDate,
+                currentLocalDate = values[2] as LocalDate,
+                pastDateEditMode = values[3] as Boolean,
+                rolloverPreviousDate = values[4] as LocalDate?,
+                nowMinute = values[5] as Long,
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
     val statisticsReport: StateFlow<StatisticsReport> =
-        combine(container.repository.snapshot, mutableStatisticsSelection) { snapshot, selection ->
+        combine(container.repository.snapshot, mutableStatisticsSelection, currentLocalDate) { snapshot, selection, today ->
             StatisticsCalculator.calculate(
                 selection = selection,
-                today = LocalDate.now(),
+                today = today,
                 meals = snapshot.meals,
                 entries = snapshot.dailyEntries,
                 sessions = snapshot.tummySessions,
@@ -92,7 +127,7 @@ class MainViewModel(
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5_000),
-                StatisticsCalculator.calculate(StatisticsSelection(), LocalDate.now(), emptyList(), emptyList(), emptyList()),
+                StatisticsCalculator.calculate(StatisticsSelection(), currentLocalDate.value, emptyList(), emptyList(), emptyList()),
             )
 
     init {
@@ -102,6 +137,7 @@ class MainViewModel(
                 delay(30_000)
             }
         }
+        scheduleMidnightCheck()
         viewModelScope.launch {
             container.timerController.events.collect { event ->
                 when (event) {
@@ -130,12 +166,48 @@ class MainViewModel(
     }
 
     fun selectDate(date: LocalDate) {
-        if (!date.isAfter(LocalDate.now())) {
+        refreshLocalDate()
+        if (!date.isAfter(currentLocalDate.value)) {
             if (date != selectedDate.value && timer.value.phase != TimerPhase.IDLE) {
                 container.timerController.cancel(TimerCancelReason.DATE_CHANGED)
             }
+            pastDateEditMode.value = false
             selectedDate.value = date
         }
+    }
+
+    fun enablePastDateEditing() {
+        if (selectedDate.value.isBefore(currentLocalDate.value)) pastDateEditMode.value = true
+    }
+
+    fun finishPastDateEditing() {
+        pastDateEditMode.value = false
+    }
+
+    fun setEditorOpen(
+        open: Boolean,
+        date: LocalDate? = null,
+    ) {
+        editorOpen.value = open
+        editorDate.value = date.takeIf { open }
+    }
+
+    fun acknowledgeDateRollover() {
+        rolloverPreviousDate.value = null
+    }
+
+    fun onForegrounded() {
+        refreshLocalDate()
+        scheduleMidnightCheck()
+    }
+
+    fun onSystemDateTimeChanged() {
+        refreshLocalDate()
+        scheduleMidnightCheck()
+    }
+
+    fun onMainScreenChanged(route: String?) {
+        if (route != "today") pastDateEditMode.value = false
     }
 
     fun selectStatisticsRange(selection: StatisticsSelection) {
@@ -143,7 +215,7 @@ class MainViewModel(
     }
 
     fun startTimer() {
-        if (selectedDate.value == LocalDate.now()) container.timerController.start()
+        if (selectedDate.value == currentLocalDate.value) container.timerController.start()
     }
 
     fun stopTimer() = container.timerController.stopAndSave()
@@ -152,7 +224,11 @@ class MainViewModel(
 
     fun confirmTimer() = container.timerController.confirmSave()
 
-    fun onBackgrounded() = container.timerController.onBackgrounded()
+    fun onBackgrounded() {
+        pastDateEditMode.value = false
+        midnightJob?.cancel()
+        container.timerController.onBackgrounded()
+    }
 
     fun mealWarnings(
         amount: Int,
@@ -172,24 +248,30 @@ class MainViewModel(
         date: LocalDate,
         time: LocalTime,
         amount: Int,
-    ) = viewModelScope.launch {
-        if (id == 0L) {
-            container.repository.addMeal(date, time, amount)
-        } else {
-            val old = state.value.meals.first { it.id == id }
-            container.repository.updateMeal(old.copy(date = date.toString(), time = time.withNano(0).toString(), amountMl = amount))
+    ): Job {
+        val authorized = canMutate(date)
+        return viewModelScope.launch {
+            if (!authorized) return@launch
+            if (id == 0L) {
+                container.repository.addMeal(date, time, amount)
+            } else {
+                val old = state.value.meals.first { it.id == id }
+                container.repository.updateMeal(old.copy(date = date.toString(), time = time.withNano(0).toString(), amountMl = amount))
+            }
+            checkCompleteness()
         }
-        checkCompleteness()
     }
 
     fun deleteMeal(item: MealEntity) =
         viewModelScope.launch {
+            if (!canMutate(LocalDate.parse(item.date))) return@launch
             container.repository.deleteMeal(item)
             messages.emit(UiMessage.MealDeleted(item))
         }
 
     fun deleteTummy(item: TummySessionEntity) =
         viewModelScope.launch {
+            if (!canMutate(LocalDate.parse(item.date))) return@launch
             container.repository.deleteTummy(item)
             messages.emit(UiMessage.TummyDeleted(item))
         }
@@ -205,12 +287,14 @@ class MainViewModel(
 
     fun setWaya(status: TernaryStatus) =
         viewModelScope.launch {
+            if (!canMutate(selectedDate.value)) return@launch
             container.repository.setDailyStatus(selectedDate.value, waya = status)
             checkCompleteness()
         }
 
     fun setExercise(status: TernaryStatus) =
         viewModelScope.launch {
+            if (!canMutate(selectedDate.value)) return@launch
             container.repository.setDailyStatus(selectedDate.value, exercise = status)
             checkCompleteness()
         }
@@ -220,16 +304,26 @@ class MainViewModel(
         date: LocalDate = selectedDate.value,
     ): Set<EntryWarning> = AppLogic.stoolWarnings(count, date)
 
-    fun setStoolCount(count: Int?) =
-        viewModelScope.launch {
-            container.repository.setStoolCount(selectedDate.value, count)
+    fun setStoolCount(
+        count: Int?,
+        date: LocalDate = selectedDate.value,
+    ): Job {
+        val authorized = canMutate(date)
+        return viewModelScope.launch {
+            if (!authorized) return@launch
+            container.repository.setStoolCount(date, count)
             checkCompleteness()
         }
+    }
 
-    fun resetStatuses() = viewModelScope.launch { container.repository.resetDailyStatuses(selectedDate.value) }
+    fun resetStatuses() =
+        viewModelScope.launch {
+            if (canMutate(selectedDate.value)) container.repository.resetDailyStatuses(selectedDate.value)
+        }
 
     fun markNoTummy() =
         viewModelScope.launch {
+            if (!canMutate(selectedDate.value)) return@launch
             if (!container.repository.markNoTummy(
                     selectedDate.value,
                 )
@@ -244,16 +338,20 @@ class MainViewModel(
         date: LocalDate,
         time: LocalTime,
         seconds: Long,
-    ) = viewModelScope.launch {
-        if (id == 0L) {
-            container.repository.addTummy(date, time, seconds, TummyInputMethod.RUCNO)
-        } else {
-            val old = state.value.sessions.first { it.id == id }
-            container.repository.updateTummy(
-                old.copy(date = date.toString(), time = time.withNano(0).toString(), durationSeconds = seconds),
-            )
+    ): Job {
+        val authorized = canMutate(date)
+        return viewModelScope.launch {
+            if (!authorized) return@launch
+            if (id == 0L) {
+                container.repository.addTummy(date, time, seconds, TummyInputMethod.RUCNO)
+            } else {
+                val old = state.value.sessions.first { it.id == id }
+                container.repository.updateTummy(
+                    old.copy(date = date.toString(), time = time.withNano(0).toString(), durationSeconds = seconds),
+                )
+            }
+            checkCompleteness()
         }
-        checkCompleteness()
     }
 
     fun setTheme(theme: AppTheme) = viewModelScope.launch { container.repository.updateSettings { it.copy(theme = theme) } }
@@ -298,7 +396,40 @@ class MainViewModel(
     }
 
     private suspend fun checkCompleteness() {
-        if (AppLogic.missing(container.repository.summary(LocalDate.now())).isEmpty()) container.notifications.cancelReminder()
+        if (AppLogic.missing(container.repository.summary(currentLocalDate.value)).isEmpty()) container.notifications.cancelReminder()
+    }
+
+    private fun canMutate(date: LocalDate): Boolean =
+        date == rolloverPreviousDate.value ||
+            (
+                date == selectedDate.value &&
+                    !date.isAfter(currentLocalDate.value) &&
+                    (!date.isBefore(currentLocalDate.value) || pastDateEditMode.value)
+            )
+
+    private fun refreshLocalDate() {
+        val newDate = localDayClock.today()
+        val previousDate = currentLocalDate.value
+        val transition = resolveLocalDayTransition(previousDate, selectedDate.value, newDate, pastDateEditMode.value)
+        if (!transition.changed) return
+        currentLocalDate.value = transition.currentLocalDate
+        pastDateEditMode.value = transition.pastDateEditMode
+        if (editorOpen.value) rolloverPreviousDate.value = editorDate.value ?: previousDate
+        container.timerController.onLocalDateChanged(newDate)
+        selectedDate.value = transition.selectedDate
+        val settings = state.value.settings
+        container.reminderScheduler.schedule(settings.reminderEnabled, LocalTime.parse(settings.reminderTime))
+    }
+
+    private fun scheduleMidnightCheck() {
+        midnightJob?.cancel()
+        midnightJob =
+            viewModelScope.launch {
+                while (true) {
+                    delay(localDayClock.millisUntilNextDay() + 250L)
+                    refreshLocalDate()
+                }
+            }
     }
 
     class Factory(

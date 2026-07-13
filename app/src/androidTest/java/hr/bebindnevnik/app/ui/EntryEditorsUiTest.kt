@@ -145,6 +145,25 @@ class EntryEditorsUiTest {
         rule.onNodeWithTag("save-entry").performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun midnightDraftCanOnlySaveWithItsPreviousDateOrBeDiscarded() {
+        val previous = LocalDate.of(2026, 7, 10)
+        var savedDate: LocalDate? = null
+        var closed = 0
+        showMealEditor(
+            item = MealEntity(14, previous.toString(), "23:55", 80, 1, 1),
+            onSave = { _, date, _, _ -> savedDate = date },
+            onClose = { closed++ },
+            rolloverPreviousDate = previous,
+        )
+
+        rule.onNodeWithText("Imate nespremljene podatke za 10.07.2026.").assertIsDisplayed()
+        rule.onNodeWithTag("save-midnight-draft").performClick()
+        rule.runOnIdle {
+            assertEquals(previous, savedDate)
+            assertEquals(1, closed)
+        }
+    }
+
     @Test fun futureDateIsNotSelectable() {
         val today = LocalDate.of(2026, 7, 11)
         val selectable = PastOrTodaySelectableDates(today)
@@ -164,6 +183,7 @@ class EntryEditorsUiTest {
         defaultDate: LocalDate? = null,
         onSave: (Long, LocalDate, LocalTime, Int) -> Unit = { _, _, _, _ -> },
         onClose: () -> Unit = {},
+        rolloverPreviousDate: LocalDate? = null,
     ) {
         rule.setContent {
             BebinDnevnikTheme(AppTheme.SVIJETLA) {
@@ -174,6 +194,7 @@ class EntryEditorsUiTest {
                     onSave = onSave,
                     onClose = onClose,
                     clock = clock,
+                    rolloverPreviousDate = rolloverPreviousDate,
                 )
             }
         }

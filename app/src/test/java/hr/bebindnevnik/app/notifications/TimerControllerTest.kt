@@ -104,6 +104,26 @@ class TimerControllerTest {
             assertEquals(TimerPhase.IDLE, fixture.controller.state.value.phase)
         }
 
+    @Test fun crossingMidnightStopsAndRequiresExplicitSaveForPreviousDate() =
+        runTest {
+            val fixture = fixture(this)
+            fixture.controller.start()
+            fixture.elapsedMillis = 120_000
+
+            fixture.controller.onLocalDateChanged(LocalDate.of(2026, 7, 13))
+
+            assertEquals(TimerPhase.CONFIRMING, fixture.controller.state.value.phase)
+            assertTrue(fixture.controller.state.value.crossedMidnight)
+            assertEquals(LocalDate.of(2026, 7, 12), fixture.controller.state.value.sessionDate)
+            assertFalse(fixture.notifications.visible)
+            assertTrue(fixture.saved.isEmpty())
+
+            fixture.controller.confirmSave()
+            advanceUntilIdle()
+            assertEquals("2026-07-12", fixture.saved.single().date)
+            assertEquals(120L, fixture.saved.single().durationSeconds)
+        }
+
     private fun fixture(scope: TestScope): Fixture {
         lateinit var fixture: Fixture
         val notifications = FakeTimerNotifications()

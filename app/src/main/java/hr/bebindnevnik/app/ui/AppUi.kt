@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -159,6 +161,10 @@ fun BebinDnevnikApp(
     var notificationExplanation by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    LaunchedEffect(backStack?.destination?.route) {
+        viewModel.onMainScreenChanged(backStack?.destination?.route)
+    }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message ->
@@ -368,10 +374,30 @@ private fun TodayScreen(
     var deleteMeal by remember { mutableStateOf<MealEntity?>(null) }
     var deleteTummy by remember { mutableStateOf<TummySessionEntity?>(null) }
     var stoolEditor by remember { mutableStateOf(false) }
+    var stoolEditorDate by remember { mutableStateOf<LocalDate?>(null) }
     var resetConfirm by remember { mutableStateOf(false) }
-    val isToday = state.selectedDate == LocalDate.now()
+    var unlockConfirm by remember { mutableStateOf(false) }
+    val isToday = state.selectedDate == state.currentLocalDate
+    val canEdit = state.canEditSelectedDate
     val notificationVisible = !notifications.notificationsAllowed()
     val listState = rememberLazyListState()
+
+    val editorVisible = newMeal || mealDialog != null || newTummy || tummyDialog != null || stoolEditor
+    LaunchedEffect(editorVisible, state.selectedDate) {
+        viewModel.setEditorOpen(editorVisible, state.selectedDate.takeIf { editorVisible })
+    }
+    LaunchedEffect(state.rolloverPreviousDate, editorVisible) {
+        if (state.rolloverPreviousDate != null && !editorVisible) viewModel.acknowledgeDateRollover()
+    }
+    LaunchedEffect(canEdit, state.rolloverPreviousDate) {
+        if (!canEdit && state.rolloverPreviousDate == null) {
+            newMeal = false
+            mealDialog = null
+            newTummy = false
+            tummyDialog = null
+            stoolEditor = false
+        }
+    }
 
     LaunchedEffect(highlight, notificationVisible) {
         val target = listOf("obrok", "Waya kapi", "vježbanje", "stolica", "tummy time").firstOrNull { it in highlight }
@@ -398,7 +424,17 @@ private fun TodayScreen(
                 selectedDate = state.selectedDate,
                 status = state.summary.status,
                 onDateSelected = viewModel::selectDate,
+                today = state.currentLocalDate,
             )
+        }
+        if (state.isPastDate) {
+            item {
+                PastDayLockCard(
+                    editMode = state.pastDateEditMode,
+                    onEdit = { unlockConfirm = true },
+                    onFinish = viewModel::finishPastDateEditing,
+                )
+            }
         }
         if (notificationVisible) item { NotificationWarning(openSettings) }
         item {
@@ -416,13 +452,15 @@ private fun TodayScreen(
         item {
             HighlightCard("obrok" in highlight) {
                 IllustratedSectionTitle("Novi obrok", BabyIllustrationKind.BOTTLE)
-                Button(onClick = { newMeal = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Dodaj obrok")
+                if (canEdit) {
+                    Button(onClick = { newMeal = true }, modifier = Modifier.fillMaxWidth().height(56.dp).testTag("add-meal")) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Dodaj obrok")
+                    }
                 }
                 state.selectedMeals.sortedByDescending { it.time }.forEach { meal ->
-                    EntryRow("${meal.time.hrStoredTime()} · ${meal.amountMl} ml", { mealDialog = meal }, { deleteMeal = meal })
+                    EntryRow("${meal.time.hrStoredTime()} · ${meal.amountMl} ml", { mealDialog = meal }, { deleteMeal = meal }, canEdit)
                 }
             }
         }
@@ -433,6 +471,7 @@ private fun TodayScreen(
                 "Waya kapi" in highlight,
                 state.summary.waya,
                 viewModel::setWaya,
+                canEdit,
             )
         }
         item {
@@ -442,17 +481,23 @@ private fun TodayScreen(
                 "vježbanje" in highlight,
                 state.summary.exercise,
                 viewModel::setExercise,
+                canEdit,
             )
         }
         item {
             HighlightCard("stolica" in highlight, Modifier.testTag("stool-card")) {
                 IllustratedSectionTitle("Stolica", BabyIllustrationKind.STOOL)
                 Text("Trenutačno: ${stoolCountText(state.summary.stoolCount)}", style = MaterialTheme.typography.bodyLarge)
-                Button(
-                    onClick = { stoolEditor = true },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("edit-stool"),
-                ) {
-                    Text(if (state.summary.stoolCount == null) "Evidentiraj broj" else "Uredi broj")
+                if (canEdit) {
+                    Button(
+                        onClick = {
+                            stoolEditorDate = state.selectedDate
+                            stoolEditor = true
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("edit-stool"),
+                    ) {
+                        Text(if (state.summary.stoolCount == null) "Evidentiraj broj" else "Uredi broj")
+                    }
                 }
             }
         }
@@ -497,15 +542,19 @@ private fun TodayScreen(
                         }
                     }
                 }
-                OutlinedButton(
-                    onClick = { newTummy = true },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("manual-tummy"),
-                ) { Text("Ručni unos") }
+                if (canEdit) {
+                    OutlinedButton(
+                        onClick = { newTummy = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("manual-tummy"),
+                    ) { Text("Ručni unos") }
+                }
                 if (state.selectedSessions.isEmpty() && !state.summary.noTummyTime) {
                     Text("Nije evidentirano", modifier = Modifier.padding(vertical = 6.dp))
-                    TextButton(
-                        onClick = viewModel::markNoTummy,
-                    ) { Text(if (isToday) "Danas nije bilo tummy timea" else "Nije bilo tummy timea") }
+                    if (canEdit) {
+                        TextButton(
+                            onClick = viewModel::markNoTummy,
+                        ) { Text(if (isToday) "Danas nije bilo tummy timea" else "Nije bilo tummy timea") }
+                    }
                 } else if (state.summary.noTummyTime) {
                     Text("Izričito evidentirano: nije bilo tummy timea")
                 }
@@ -513,13 +562,13 @@ private fun TodayScreen(
                     EntryRow("${session.time.hrStoredTime()} · ${session.durationSeconds.durationText()}", { tummyDialog = session }, {
                         deleteTummy =
                             session
-                    })
+                    }, canEdit)
                 }
             }
         }
         item {
             SummaryCard(state.summary)
-            TextButton(onClick = { resetConfirm = true }) { Text("Resetiraj dnevne statuse") }
+            if (canEdit) TextButton(onClick = { resetConfirm = true }) { Text("Resetiraj dnevne statuse") }
         }
     }
     if (newMeal ||
@@ -533,7 +582,9 @@ private fun TodayScreen(
             onClose = {
                 newMeal = false
                 mealDialog = null
+                viewModel.acknowledgeDateRollover()
             },
+            rolloverPreviousDate = state.rolloverPreviousDate,
         )
     }
     if (newTummy ||
@@ -547,16 +598,20 @@ private fun TodayScreen(
             onClose = {
                 newTummy = false
                 tummyDialog = null
+                viewModel.acknowledgeDateRollover()
             },
+            rolloverPreviousDate = state.rolloverPreviousDate,
         )
     }
-    if (timer.phase == TimerPhase.CONFIRMING) {
+    if (timer.phase == TimerPhase.CONFIRMING && state.rolloverPreviousDate == null) {
         AlertDialog(
             onDismissRequest = viewModel::cancelTimer,
             title = { Text("Spremiti tummy-time sesiju?") },
             text = {
                 Text(
-                    if (timer.elapsedSeconds < 5) {
+                    if (timer.crossedMidnight) {
+                        "Počeo je novi dan. Spremiti izmjereno trajanje kao sesiju za ${timer.sessionDate?.hrDate()}?"
+                    } else if (timer.elapsedSeconds < 5) {
                         "Sesija je kraća od 5 sekundi. Želite li je ipak spremiti?"
                     } else {
                         "Sesija je dulja od 60 minuta. Želite li je ipak spremiti?"
@@ -576,10 +631,15 @@ private fun TodayScreen(
     if (stoolEditor) {
         StoolEditorSheet(
             initialCount = state.summary.stoolCount,
-            date = state.selectedDate,
-            onWarnings = { viewModel.stoolWarnings(it, state.selectedDate) },
-            onSave = viewModel::setStoolCount,
-            onClose = { stoolEditor = false },
+            date = stoolEditorDate ?: state.selectedDate,
+            onWarnings = { viewModel.stoolWarnings(it, stoolEditorDate ?: state.selectedDate) },
+            onSave = { viewModel.setStoolCount(it, stoolEditorDate ?: state.selectedDate) },
+            onClose = {
+                stoolEditor = false
+                stoolEditorDate = null
+                viewModel.acknowledgeDateRollover()
+            },
+            rolloverPreviousDate = state.rolloverPreviousDate,
         )
     }
     deleteMeal?.let { item ->
@@ -614,6 +674,72 @@ private fun TodayScreen(
             },
             dismissButton = { TextButton(onClick = { resetConfirm = false }) { Text("Odustani") } },
         )
+    }
+    if (unlockConfirm) {
+        AlertDialog(
+            onDismissRequest = { unlockConfirm = false },
+            icon = { Icon(Icons.Default.LockOpen, contentDescription = null) },
+            title = { Text("Omogućiti uređivanje?") },
+            text = {
+                Text(
+                    "Želite li omogućiti uređivanje podataka za ${state.selectedDate.hrDate()}? " +
+                        "Promjene će utjecati na statistiku i dnevne sažetke.",
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.enablePastDateEditing()
+                        unlockConfirm = false
+                    },
+                    modifier = Modifier.testTag("confirm-unlock-past-day"),
+                ) { Text("Omogući uređivanje") }
+            },
+            dismissButton = { TextButton(onClick = { unlockConfirm = false }) { Text("Odustani") } },
+        )
+    }
+}
+
+@Composable
+private fun PastDayLockCard(
+    editMode: Boolean,
+    onEdit: () -> Unit,
+    onFinish: () -> Unit,
+) {
+    OutlinedCard(
+        Modifier.fillMaxWidth().testTag(if (editMode) "past-day-edit-mode" else "past-day-locked"),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .35f)),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                if (editMode) Icons.Default.LockOpen else Icons.Default.Lock,
+                contentDescription = if (editMode) "Dan je otključan" else "Dan je zaključan",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (editMode) "Način uređivanja" else "Prošli dan – podaci su zaključani",
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    if (editMode) "Promjene se odmah odražavaju u sažecima i statistici." else "Podaci su dostupni samo za čitanje.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (editMode) {
+                TextButton(onClick = onFinish, modifier = Modifier.heightIn(min = 48.dp).testTag("finish-past-edit")) { Text("Završi") }
+            } else {
+                TextButton(onClick = onEdit, modifier = Modifier.heightIn(min = 48.dp).testTag("unlock-past-day")) {
+                    Icon(Icons.Default.Edit, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Uredi")
+                }
+            }
+        }
     }
 }
 
@@ -668,6 +794,7 @@ private fun StatusCard(
     highlighted: Boolean,
     status: TernaryStatus,
     set: (TernaryStatus) -> Unit,
+    enabled: Boolean = true,
 ) = HighlightCard(highlighted) {
     IllustratedSectionTitle(title, illustration)
     Text("Trenutačno: ${status.label()}")
@@ -675,6 +802,7 @@ private fun StatusCard(
     FilterChip(
         selected = status == unset,
         onClick = { set(unset) },
+        enabled = enabled,
         label = { Text(unset.label()) },
         leadingIcon = if (status == unset) ({ Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }) else null,
         modifier = Modifier.fillMaxWidth(),
@@ -684,6 +812,7 @@ private fun StatusCard(
             FilterChip(
                 selected = status == value,
                 onClick = { set(value) },
+                enabled = enabled,
                 label = { Text(value.label()) },
                 leadingIcon = if (status == value) ({ Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }) else null,
                 modifier = Modifier.weight(1f),
@@ -697,14 +826,17 @@ private fun EntryRow(
     text: String,
     edit: () -> Unit,
     delete: () -> Unit,
+    editable: Boolean = true,
 ) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, Modifier.weight(1f))
-        IconButton(onClick = edit, modifier = Modifier.semantics { contentDescription = "Uredi zapis" }) { Icon(Icons.Default.Edit, null) }
-        IconButton(
-            onClick = delete,
-            modifier = Modifier.semantics { contentDescription = "Izbriši zapis" },
-        ) { Icon(Icons.Default.Delete, null) }
+        if (editable) {
+            IconButton(onClick = edit, modifier = Modifier.semantics { contentDescription = "Uredi zapis" }) { Icon(Icons.Default.Edit, null) }
+            IconButton(
+                onClick = delete,
+                modifier = Modifier.semantics { contentDescription = "Izbriši zapis" },
+            ) { Icon(Icons.Default.Delete, null) }
+        }
     }
 }
 
@@ -792,7 +924,7 @@ private fun CalendarScreen(
     viewModel: MainViewModel,
     select: (LocalDate) -> Unit,
 ) {
-    var month by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
+    var month by rememberSaveable { mutableStateOf(YearMonth.from(state.currentLocalDate).toString()) }
     val shown = YearMonth.parse(month)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Row(
@@ -813,11 +945,11 @@ private fun CalendarScreen(
             )
             TextButton(onClick = {
                 if (shown <
-                    YearMonth.now()
+                    YearMonth.from(state.currentLocalDate)
                 ) {
                     month = shown.plusMonths(1).toString()
                 }
-            }, enabled = shown < YearMonth.now()) { Text("Sljedeći ›") }
+            }, enabled = shown < YearMonth.from(state.currentLocalDate)) { Text("Sljedeći ›") }
         }
         Row(Modifier.fillMaxWidth()) {
             listOf("Pon", "Uto", "Sri", "Čet", "Pet", "Sub", "Ned").forEach {
@@ -832,7 +964,7 @@ private fun CalendarScreen(
                     if (date == null) {
                         Spacer(Modifier.weight(1f).height(64.dp))
                     } else {
-                        val disabled = date.isAfter(LocalDate.now())
+                        val disabled = date.isAfter(state.currentLocalDate)
                         val summary = AppLogic.summary(date, state.meals, state.entries, state.sessions)
                         val symbol =
                             when (summary.status) {

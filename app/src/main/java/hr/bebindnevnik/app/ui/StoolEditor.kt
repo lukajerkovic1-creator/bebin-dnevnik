@@ -48,8 +48,9 @@ internal fun StoolEditorSheet(
     onWarnings: (Int) -> Set<EntryWarning>,
     onSave: (Int?) -> Unit,
     onClose: () -> Unit,
+    rolloverPreviousDate: LocalDate? = null,
 ) {
-    var count by remember(date, initialCount) { mutableStateOf(initialCount) }
+    var count by remember(date) { mutableStateOf(initialCount) }
     var confirmHighValue by remember { mutableStateOf(false) }
 
     fun attemptSave(confirmed: Boolean = false) {
@@ -62,87 +63,89 @@ internal fun StoolEditorSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onClose,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.testTag("stool-editor"),
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+    if (rolloverPreviousDate == null) {
+        ModalBottomSheet(
+            onDismissRequest = onClose,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.testTag("stool-editor"),
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Evidentiraj stolicu", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(date.hrDate(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Evidentiraj stolicu", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(date.hrDate(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    BabyIllustration(BabyIllustrationKind.STOOL, Modifier.size(BabyDimensions.IllustrationSmall))
                 }
-                BabyIllustration(BabyIllustrationKind.STOOL, Modifier.size(BabyDimensions.IllustrationSmall))
-            }
-            Text("Brzi odabir", style = MaterialTheme.typography.titleMedium)
-            listOf(listOf(0, 1, 2), listOf(3, 4, 5)).forEach { values ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    values.forEach { value ->
-                        FilterChip(
-                            selected = count == value,
-                            onClick = { count = value },
-                            label = { Text(value.toString()) },
-                            leadingIcon = if (count == value) ({ Icon(Icons.Default.Check, "Odabrano") }) else null,
-                            modifier = Modifier.weight(1f).heightIn(min = BabyDimensions.TouchTarget).testTag("stool-$value"),
-                        )
+                Text("Brzi odabir", style = MaterialTheme.typography.titleMedium)
+                listOf(listOf(0, 1, 2), listOf(3, 4, 5)).forEach { values ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        values.forEach { value ->
+                            FilterChip(
+                                selected = count == value,
+                                onClick = { count = value },
+                                label = { Text(value.toString()) },
+                                leadingIcon = if (count == value) ({ Icon(Icons.Default.Check, "Odabrano") }) else null,
+                                modifier = Modifier.weight(1f).heightIn(min = BabyDimensions.TouchTarget).testTag("stool-$value"),
+                            )
+                        }
                     }
                 }
-            }
-            OutlinedCard(Modifier.fillMaxWidth()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    IconButton(
-                        onClick = { count = ((count ?: 0) - 1).coerceAtLeast(0) },
-                        enabled = (count ?: 0) > 0,
-                        modifier = Modifier.semantics { contentDescription = "Smanji broj stolica" }.testTag("stool-minus"),
-                    ) { Icon(Icons.Default.Remove, contentDescription = null) }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Broj stolica", style = MaterialTheme.typography.labelMedium)
-                        Text(
-                            count?.toString() ?: "—",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.testTag("stool-count"),
-                        )
+                OutlinedCard(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        IconButton(
+                            onClick = { count = ((count ?: 0) - 1).coerceAtLeast(0) },
+                            enabled = (count ?: 0) > 0,
+                            modifier = Modifier.semantics { contentDescription = "Smanji broj stolica" }.testTag("stool-minus"),
+                        ) { Icon(Icons.Default.Remove, contentDescription = null) }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Broj stolica", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                count?.toString() ?: "—",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("stool-count"),
+                            )
+                        }
+                        IconButton(
+                            onClick = { count = ((count ?: 0).toLong() + 1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() },
+                            modifier = Modifier.semantics { contentDescription = "Povećaj broj stolica" }.testTag("stool-plus"),
+                        ) { Icon(Icons.Default.Add, contentDescription = null) }
                     }
-                    IconButton(
-                        onClick = { count = ((count ?: 0).toLong() + 1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() },
-                        modifier = Modifier.semantics { contentDescription = "Povećaj broj stolica" }.testTag("stool-plus"),
-                    ) { Icon(Icons.Default.Add, contentDescription = null) }
                 }
-            }
-            FilterChip(
-                selected = count == null,
-                onClick = { count = null },
-                label = { Text("Nije evidentirano") },
-                leadingIcon = if (count == null) ({ Icon(Icons.Default.Check, "Odabrano") }) else null,
-                modifier = Modifier.fillMaxWidth().heightIn(min = BabyDimensions.TouchTarget).testTag("stool-unset"),
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(onClick = onClose, modifier = Modifier.weight(1f).heightIn(min = BabyDimensions.TouchTarget)) {
-                    Text("Odustani")
+                FilterChip(
+                    selected = count == null,
+                    onClick = { count = null },
+                    label = { Text("Nije evidentirano") },
+                    leadingIcon = if (count == null) ({ Icon(Icons.Default.Check, "Odabrano") }) else null,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = BabyDimensions.TouchTarget).testTag("stool-unset"),
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextButton(onClick = onClose, modifier = Modifier.weight(1f).heightIn(min = BabyDimensions.TouchTarget)) {
+                        Text("Odustani")
+                    }
+                    Button(
+                        onClick = { attemptSave() },
+                        enabled = !date.isAfter(LocalDate.now()),
+                        modifier = Modifier.weight(1f).heightIn(min = BabyDimensions.TouchTarget).testTag("save-stool"),
+                    ) { Text("Spremi") }
                 }
-                Button(
-                    onClick = { attemptSave() },
-                    enabled = !date.isAfter(LocalDate.now()),
-                    modifier = Modifier.weight(1f).heightIn(min = BabyDimensions.TouchTarget).testTag("save-stool"),
-                ) { Text("Spremi") }
             }
         }
     }
-    if (confirmHighValue) {
+    if (confirmHighValue && rolloverPreviousDate == null) {
         AlertDialog(
             onDismissRequest = { confirmHighValue = false },
             icon = { Icon(Icons.Default.Warning, contentDescription = null) },
@@ -156,6 +159,9 @@ internal fun StoolEditorSheet(
             },
             dismissButton = { TextButton(onClick = { confirmHighValue = false }) { Text("Ispravi") } },
         )
+    }
+    rolloverPreviousDate?.let { previousDate ->
+        MidnightDraftDialog(previousDate, { attemptSave(true) }, onClose)
     }
 }
 
