@@ -32,6 +32,8 @@ data class CloudBackupMetadata(
     val mealCount: Int,
     val dailyCount: Int,
     val tummyCount: Int,
+    val growthCount: Int = 0,
+    val complementaryFoodCount: Int = 0,
 )
 
 data class DecodedCloudBackup(
@@ -75,6 +77,8 @@ object CloudBackupCodec {
                 mealCount = snapshot.meals.size,
                 dailyCount = snapshot.dailyEntries.size,
                 tummyCount = snapshot.tummySessions.size,
+                growthCount = snapshot.growthMeasurements.size,
+                complementaryFoodCount = snapshot.complementaryFoodMeals.size,
             )
         val header = metadata.toHeader(passwordWrap, dataNonce).toString().toByteArray(Charsets.UTF_8)
         val plain = BackupManager.snapshotJson(snapshot).toByteArray(Charsets.UTF_8)
@@ -220,6 +224,8 @@ object CloudBackupCodec {
         put("mealCount", mealCount)
         put("dailyCount", dailyCount)
         put("tummyCount", tummyCount)
+        put("growthCount", growthCount)
+        put("complementaryFoodCount", complementaryFoodCount)
         put("kdf", "PBKDF2-HMAC-SHA-256")
         put("kdfIterations", wrap.iterations)
         put("salt", wrap.salt.base64())
@@ -236,6 +242,8 @@ object CloudBackupCodec {
             getInt("mealCount"),
             getInt("dailyCount"),
             getInt("tummyCount"),
+            optInt("growthCount", 0),
+            optInt("complementaryFoodCount", 0),
         )
 
     private fun ByteArray.base64(): String =

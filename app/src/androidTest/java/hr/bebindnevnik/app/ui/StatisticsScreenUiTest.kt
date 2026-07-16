@@ -9,9 +9,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
-import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -21,6 +22,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import hr.bebindnevnik.app.data.AppTheme
+import hr.bebindnevnik.app.data.ComplementaryFoodMealEntity
+import hr.bebindnevnik.app.data.ComplementaryFoodUnit
 import hr.bebindnevnik.app.data.DailyEntryEntity
 import hr.bebindnevnik.app.data.MealEntity
 import hr.bebindnevnik.app.data.TernaryStatus
@@ -62,7 +65,8 @@ class StatisticsScreenUiTest {
         }
         rule.onNodeWithTag("statistics-screen").performScrollToNode(hasText("Hranjenje po danu"))
         rule.onNodeWithTag("feeding-chart").performTouchInput { click(center) }
-        rule.onNode(hasContentDescription("Otvori", substring = true)).performClick()
+        rule.onNodeWithTag("statistics-screen").performScrollToNode(hasTestTag("feeding-chart-open-day"))
+        rule.onNodeWithTag("feeding-chart-open-day").performClick()
         rule.runOnIdle { assertTrue(opened != null) }
     }
 
@@ -97,6 +101,19 @@ class StatisticsScreenUiTest {
         rule.onRoot().captureToImage().also { assertTrue(it.width > 0) }
     }
 
+    @Test fun complementaryFoodStatisticsKeepGramsMillilitersAndIngredientsVisible() {
+        rule.setContent {
+            BebinDnevnikTheme(AppTheme.SVIJETLA) {
+                EnhancedStatisticsScreen(report(withData = true), StatisticsSelection(), {}, {})
+            }
+        }
+        rule.onNodeWithTag("statistics-screen").performScrollToNode(hasText("Dohrana po danu"))
+        rule.onNodeWithTag("complementary-food-chart").assertIsDisplayed()
+        rule.onNodeWithTag("statistics-screen").performScrollToNode(hasText("Različitih namirnica"))
+        rule.onNodeWithText("Različitih namirnica").assertIsDisplayed()
+        assertTrue(rule.onAllNodesWithText("mrkva").fetchSemanticsNodes().isNotEmpty())
+    }
+
     private fun report(withData: Boolean = false): hr.bebindnevnik.app.domain.StatisticsReport {
         val today = LocalDate.now()
         if (!withData) return StatisticsCalculator.calculate(StatisticsSelection(), today, emptyList(), emptyList(), emptyList())
@@ -114,6 +131,11 @@ class StatisticsScreenUiTest {
             listOf(
                 TummySessionEntity(1, today.toString(), "10:00", 180, TummyInputMethod.RUCNO, time, time),
             )
-        return StatisticsCalculator.calculate(StatisticsSelection(), today, meals, entries, sessions)
+        val food =
+            listOf(
+                ComplementaryFoodMealEntity(1, today.toString(), "11:00", listOf("mrkva"), 20, ComplementaryFoodUnit.G, time, time),
+                ComplementaryFoodMealEntity(2, today.toString(), "16:00", listOf("jabuka"), 30, ComplementaryFoodUnit.ML, time, time),
+            )
+        return StatisticsCalculator.calculate(StatisticsSelection(), today, meals, entries, sessions, food)
     }
 }

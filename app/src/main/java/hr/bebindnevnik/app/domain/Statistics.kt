@@ -1,5 +1,6 @@
 package hr.bebindnevnik.app.domain
 
+import hr.bebindnevnik.app.data.ComplementaryFoodMealEntity
 import hr.bebindnevnik.app.data.DailyEntryEntity
 import hr.bebindnevnik.app.data.DayStatus
 import hr.bebindnevnik.app.data.DaySummary
@@ -98,6 +99,7 @@ data class StatisticsReport(
     val waya: HabitStatistics,
     val exercise: HabitStatistics,
     val completeness: CompletenessStatistics,
+    val complementaryFood: ComplementaryFoodStatistics,
     val comparison: TrendComparison,
 ) {
     val dayCount: Int get() = days.size
@@ -111,14 +113,15 @@ object StatisticsCalculator {
         meals: List<MealEntity>,
         entries: List<DailyEntryEntity>,
         sessions: List<TummySessionEntity>,
+        complementaryFoodMeals: List<ComplementaryFoodMealEntity> = emptyList(),
     ): StatisticsReport {
-        val firstDataDate = firstDataDate(today, meals, entries, sessions)
+        val firstDataDate = firstDataDate(today, meals, entries, sessions, complementaryFoodMeals)
         val (start, end) = selection.bounds(today, firstDataDate)
         val days = buildDays(start, end, meals, entries, sessions)
         val previousEnd = start.minusDays(1)
         val previousStart = previousEnd.minusDays(days.size.toLong() - 1)
         val previousDays = buildDays(previousStart, previousEnd, meals, entries, sessions)
-        return report(selection, start, end, days, previousDays, meals, sessions)
+        return report(selection, start, end, days, previousDays, meals, sessions, complementaryFoodMeals)
     }
 
     private fun report(
@@ -129,6 +132,7 @@ object StatisticsCalculator {
         previousDays: List<StatisticsDay>,
         meals: List<MealEntity>,
         sessions: List<TummySessionEntity>,
+        complementaryFoodMeals: List<ComplementaryFoodMealEntity>,
     ): StatisticsReport {
         val dates = days.mapTo(hashSetOf()) { it.date.toString() }
         val periodMeals = meals.filter { it.date in dates }
@@ -159,6 +163,7 @@ object StatisticsCalculator {
             habit(days.map { it.summary.waya }),
             habit(days.map { it.summary.exercise }),
             completeness,
+            ComplementaryFoodLogic.statistics(complementaryFoodMeals, start, end),
             comparison,
         )
     }
@@ -289,8 +294,9 @@ object StatisticsCalculator {
         meals: List<MealEntity>,
         entries: List<DailyEntryEntity>,
         sessions: List<TummySessionEntity>,
+        complementaryFoodMeals: List<ComplementaryFoodMealEntity>,
     ): LocalDate =
-        (meals.map { it.date } + entries.map { it.date } + sessions.map { it.date })
+        (meals.map { it.date } + entries.map { it.date } + sessions.map { it.date } + complementaryFoodMeals.map { it.date })
             .minOrNull()
             ?.let(LocalDate::parse)
             ?.coerceAtMost(today)

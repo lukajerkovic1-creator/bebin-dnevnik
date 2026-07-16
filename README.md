@@ -1,20 +1,22 @@
 # Bebin dnevnik
 
-Local-first, nativna Android aplikacija za evidenciju obroka, Waya kapi, vježbanja, stolice i tummy-time sesija. Nema profila djeteta, oglasa, analitike ni telemetrije. Lokalna šifrirana baza potpuno radi bez interneta; mreža se koristi samo za GitHub ažuriranja i dobrovoljnu Google Drive sigurnosnu kopiju.
+Local-first, nativna Android aplikacija za evidenciju mliječnih obroka, dohrane, Waya kapi, vježbanja, stolice, tummy-time sesija te profila i rasta djeteta. Nema oglasa, analitike ni telemetrije. Lokalna šifrirana baza potpuno radi bez interneta; mreža se koristi samo za GitHub ažuriranja i dobrovoljnu Google Drive sigurnosnu kopiju.
 
 ## Značajke
 
 - Kotlin, Jetpack Compose, Material 3 i single-activity arhitektura
-- zasloni Danas, Kalendar, Statistika i Postavke
+- zasloni Danas, Kalendar, Statistika, Rast i Postavke
 - šifrirana Room baza s SQLCipherom
 - ključ baze generira se sigurnim generatorom, a u privatnoj pohrani ostaje samo AES-GCM omotan ključ; zaštitni ključ živi u Android Keystoreu
-- validirani obroci, trostanja Waya kapi i vježbanja te dnevna potpunost
+- odvojeni validirani mliječni obroci i obroci dohrane s više namirnica te odvojenim jedinicama g/ml
+- profil djeteta, mjerenja rasta i lokalni WHO referentni izračuni; Fenton rezultati nisu izmišljeni bez licence za podatke
+- trostanja Waya kapi i vježbanja te dnevna potpunost u koju opcionalna dohrana ne ulazi
 - monotona tummy-time štoperica koja se poništava čim aplikacija ode u pozadinu
 - objedinjeni, odgodivi dnevni podsjetnik putem WorkManagera
 - šifrirana, verzionirana sigurnosna kopija i transakcijski uvoz sa zamjenom podataka
 - sigurni GitHub updater koji prije instalacije provjerava SHA-256, package name, versionCode i produkcijski certifikat
 - dobrovoljni, klijentski šifrirani Google Drive `appDataFolder` backup s pet verzija
-- ZIP izvoz tri UTF-8 BOM CSV datoteke za pregled
+- ZIP izvoz šest UTF-8 BOM CSV datoteka za pregled
 - svijetla, tamna i sistemska tema, pristupačne oznake i dodirne površine
 - automatski CI, API 29 emulator, potpisani GitHub Release i GitHub Pages
 
@@ -22,7 +24,7 @@ Local-first, nativna Android aplikacija za evidenciju obroka, Waya kapi, vježba
 
 Manifest ima samo mrežne dozvole potrebne za updater i dobrovoljni cloud backup (`INTERNET`, `ACCESS_NETWORK_STATE`) te `REQUEST_INSTALL_PACKAGES` za otvaranje Androidova sistemskog instalacijskog dijaloga. Androidova automatska cloud kopija i prijenos na drugi uređaj ostaju onemogućeni s `allowBackup=false`; izvoz i uvoz koriste Storage Access Framework bez pristupa cijeloj pohrani.
 
-SQLCipher baza obuhvaća obroke, dnevne statuse, tummy-time sesije i postavke. Nasumični 256-bitni ključ baze omotan je AES-256-GCM ključem iz Android Keystorea. Ako ključ ili baza nisu dostupni, aplikacija ne stvara tiho novu praznu bazu.
+SQLCipher baza obuhvaća mliječne obroke, dohranu, dnevne statuse, tummy-time sesije, profil, mjerenja rasta i postavke. Nasumični 256-bitni ključ baze omotan je AES-256-GCM ključem iz Android Keystorea. Ako ključ ili baza nisu dostupni, aplikacija ne stvara tiho novu praznu bazu.
 
 Normalno ažuriranje preko postojeće aplikacije zadržava lokalnu bazu jer produkcijski `applicationId` ostaje `hr.bebindnevnik.app`, versionCode raste, a svaki release koristi isti certifikat SHA-256 `f1b4b84d9b0c729bd2ddf56309d581f0a541a80c822f18e69f2b3bbe659d2d5e`. Deinstalacija ipak uklanja lokalnu bazu i Android Keystore ključeve. Za vraćanje nakon deinstalacije potreban je isti Google račun i cloud-backup lozinka ili ručno izvezena `.bdk` datoteka. Deinstalacija nije postupak ažuriranja.
 

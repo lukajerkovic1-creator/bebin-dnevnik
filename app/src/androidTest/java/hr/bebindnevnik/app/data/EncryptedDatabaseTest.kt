@@ -33,8 +33,12 @@ class EncryptedDatabaseTest {
             Room
                 .databaseBuilder(context, AppDatabase::class.java, file.absolutePath)
                 .openHelperFactory(SupportOpenHelperFactory("test-password".toByteArray()))
-                .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
-                .build()
+                .addMigrations(
+                    AppDatabase.MIGRATION_1_2,
+                    AppDatabase.MIGRATION_2_3,
+                    AppDatabase.MIGRATION_3_4,
+                    AppDatabase.MIGRATION_4_5,
+                ).build()
     }
 
     @After fun tearDown() {
@@ -120,6 +124,27 @@ class EncryptedDatabaseTest {
             } catch (_: IllegalStateException) {
             }
             assertEquals(1, dao.allMeals().size)
+            val repository = AppRepository(database)
+            val invalid =
+                repository.currentSnapshot().copy(
+                    complementaryFoodMeals =
+                        listOf(
+                            ComplementaryFoodMealEntity(
+                                date = "2026-01-02",
+                                time = "12:00",
+                                ingredients = listOf("mrkva"),
+                                amount = -1,
+                                createdAt = now,
+                                updatedAt = now,
+                            ),
+                        ),
+                )
+            try {
+                repository.replaceAll(invalid)
+            } catch (_: IllegalArgumentException) {
+            }
+            assertEquals(1, dao.allMeals().size)
+            assertTrue(dao.allComplementaryFoodMeals().isEmpty())
         }
 
     @Test fun migrationFromVersionOneAddsNotificationDateWithoutLosingSettings() {
@@ -259,4 +284,202 @@ class EncryptedDatabaseTest {
         v3.close()
         context.deleteDatabase(name)
     }
+
+    @Test fun migrationFromVersionThreeAddsGrowthTablesWithoutChangingDiaryData() {
+        val name = "migration-3-4.db"
+        context.deleteDatabase(name)
+        val v3 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(3) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                                db.execSQL("CREATE TABLE meals (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, time TEXT NOT NULL, amountMl INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+                                db.execSQL("CREATE TABLE daily_entries (date TEXT NOT NULL PRIMARY KEY, waya TEXT NOT NULL, exercise TEXT NOT NULL, noTummyTime INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, stoolCount INTEGER)")
+                                db.execSQL("CREATE TABLE tummy_sessions (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, time TEXT NOT NULL, durationSeconds INTEGER NOT NULL, inputMethod TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+                                db.execSQL("CREATE TABLE settings (id INTEGER NOT NULL PRIMARY KEY, reminderEnabled INTEGER NOT NULL, reminderTime TEXT NOT NULL, theme TEXT NOT NULL, onboardingShown INTEGER NOT NULL, lastNotificationDate TEXT)")
+                                db.execSQL("INSERT INTO meals VALUES (1, '2026-01-02', '08:00', 80, 100, 200)")
+                                db.execSQL("INSERT INTO settings VALUES (1, 1, '18:00', 'SUSTAV', 1, NULL)")
+                            }
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) = Unit
+                        },
+                    ).build(),
+            )
+        v3.writableDatabase
+        v3.close()
+        val v4 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(4) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) = Unit
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) = AppDatabase.MIGRATION_3_4.migrate(db)
+                        },
+                    ).build(),
+            )
+        v4.writableDatabase.query("SELECT amountMl FROM meals").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(80, cursor.getInt(0))
+        }
+        v4.writableDatabase.query("SELECT COUNT(*) FROM child_profile").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        v4.writableDatabase.query("SELECT COUNT(*) FROM growth_measurements").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        v4.close()
+        context.deleteDatabase(name)
+    }
+
+    @Test fun profileAndGrowthCrudSupportsMultipleMeasurementsAndScopedTransactionalDeletion() =
+        runBlocking {
+            val repository = AppRepository(database)
+            repository.initialize()
+            val now = System.currentTimeMillis()
+            repository.addMeal(java.time.LocalDate.of(2026, 1, 2), java.time.LocalTime.NOON, 80)
+            val profile =
+                ChildProfileEntity(
+                    name = "Žana",
+                    sex = ChildSex.DJEVOJCICA,
+                    birthDate = "2026-01-01",
+                    gestationalWeeks = 35,
+                    gestationalDays = 4,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            repository.saveChildProfile(profile)
+            val first = repository.addGrowthMeasurement(GrowthMeasurementEntity(date = "2026-01-02", time = "09:00", weightG = 2_100, createdAt = now, updatedAt = now))
+            val second = repository.addGrowthMeasurement(GrowthMeasurementEntity(date = "2026-01-02", time = "10:00", headCircumferenceCm = 31.2, createdAt = now, updatedAt = now))
+            assertEquals(2, repository.currentSnapshot().growthMeasurements.size)
+            repository.updateGrowthMeasurement(first.copy(weightG = 2_150))
+            assertEquals(
+                2_150,
+                repository
+                    .currentSnapshot()
+                    .growthMeasurements
+                    .first { it.id == first.id }
+                    .weightG,
+            )
+            repository.deleteGrowthMeasurement(second)
+            assertEquals(1, repository.currentSnapshot().growthMeasurements.size)
+            repository.deleteGrowthProfileAndMeasurements()
+            val afterDelete = repository.currentSnapshot()
+            assertEquals(null, afterDelete.childProfile)
+            assertTrue(afterDelete.growthMeasurements.isEmpty())
+            assertEquals(1, afterDelete.meals.size)
+        }
+
+    @Test fun migrationFromVersionFourAddsComplementaryFoodWithoutChangingExistingData() {
+        val name = "migration-4-5.db"
+        context.deleteDatabase(name)
+        val v4 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(4) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                                db.execSQL("CREATE TABLE meals (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, time TEXT NOT NULL, amountMl INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+                                db.execSQL("INSERT INTO meals VALUES (1, '2026-07-16', '08:00', 80, 100, 200)")
+                            }
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) = Unit
+                        },
+                    ).build(),
+            )
+        v4.writableDatabase
+        v4.close()
+        val v5 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(5) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) = Unit
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) = AppDatabase.MIGRATION_4_5.migrate(db)
+                        },
+                    ).build(),
+            )
+        v5.writableDatabase.query("SELECT amountMl FROM meals").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(80, cursor.getInt(0))
+        }
+        v5.writableDatabase.query("SELECT COUNT(*) FROM complementary_food_meals").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        v5.close()
+        context.deleteDatabase(name)
+    }
+
+    @Test fun complementaryFoodCrudKeepsMultipleMealsAndScopedDeletion() =
+        runBlocking {
+            val repository = AppRepository(database)
+            repository.initialize()
+            val now = System.currentTimeMillis()
+            val first =
+                repository.addComplementaryFoodMeal(
+                    ComplementaryFoodMealEntity(
+                        date = "2026-07-16",
+                        time = "09:30",
+                        ingredients = listOf("mrkva"),
+                        amount = 20,
+                        unit = ComplementaryFoodUnit.G,
+                        createdAt = now,
+                        updatedAt = now,
+                    ),
+                )
+            val second =
+                repository.addComplementaryFoodMeal(
+                    ComplementaryFoodMealEntity(
+                        date = "2026-07-16",
+                        time = "13:00",
+                        ingredients = listOf("mrkva", "krumpir"),
+                        amount = 45,
+                        unit = ComplementaryFoodUnit.ML,
+                        createdAt = now,
+                        updatedAt = now,
+                    ),
+                )
+            assertEquals(2, repository.currentSnapshot().complementaryFoodMeals.size)
+            repository.updateComplementaryFoodMeal(first.copy(amount = 25))
+            assertEquals(
+                25,
+                repository
+                    .currentSnapshot()
+                    .complementaryFoodMeals
+                    .first { it.id == first.id }
+                    .amount,
+            )
+            repository.deleteComplementaryFoodMeal(second)
+            assertEquals(listOf(first.id), repository.currentSnapshot().complementaryFoodMeals.map { it.id })
+            assertTrue(repository.currentSnapshot().growthMeasurements.isEmpty())
+        }
 }

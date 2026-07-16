@@ -9,6 +9,7 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+@Suppress("TooManyFunctions")
 interface AppDao {
     @Query("SELECT * FROM meals ORDER BY date DESC, time DESC, id DESC")
     fun observeMeals(): Flow<List<MealEntity>>
@@ -22,6 +23,15 @@ interface AppDao {
     @Query("SELECT * FROM settings WHERE id = 1")
     fun observeSettings(): Flow<SettingsEntity?>
 
+    @Query("SELECT * FROM child_profile WHERE id = 1")
+    fun observeChildProfile(): Flow<ChildProfileEntity?>
+
+    @Query("SELECT * FROM growth_measurements ORDER BY date DESC, time DESC, id DESC")
+    fun observeGrowthMeasurements(): Flow<List<GrowthMeasurementEntity>>
+
+    @Query("SELECT * FROM complementary_food_meals ORDER BY date DESC, time DESC, id DESC")
+    fun observeComplementaryFoodMeals(): Flow<List<ComplementaryFoodMealEntity>>
+
     @Query("SELECT * FROM meals")
     suspend fun allMeals(): List<MealEntity>
 
@@ -33,6 +43,15 @@ interface AppDao {
 
     @Query("SELECT * FROM settings WHERE id = 1")
     suspend fun settings(): SettingsEntity?
+
+    @Query("SELECT * FROM child_profile WHERE id = 1")
+    suspend fun childProfile(): ChildProfileEntity?
+
+    @Query("SELECT * FROM growth_measurements ORDER BY date DESC, time DESC, id DESC")
+    suspend fun allGrowthMeasurements(): List<GrowthMeasurementEntity>
+
+    @Query("SELECT * FROM complementary_food_meals ORDER BY date DESC, time DESC, id DESC")
+    suspend fun allComplementaryFoodMeals(): List<ComplementaryFoodMealEntity>
 
     @Query("SELECT * FROM daily_entries WHERE date = :date")
     suspend fun dailyEntry(date: String): DailyEntryEntity?
@@ -62,6 +81,27 @@ interface AppDao {
     suspend fun putSettings(settings: SettingsEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putChildProfile(profile: ChildProfileEntity)
+
+    @Insert
+    suspend fun insertGrowthMeasurement(measurement: GrowthMeasurementEntity): Long
+
+    @Update
+    suspend fun updateGrowthMeasurement(measurement: GrowthMeasurementEntity)
+
+    @Delete
+    suspend fun deleteGrowthMeasurement(measurement: GrowthMeasurementEntity)
+
+    @Insert
+    suspend fun insertComplementaryFoodMeal(meal: ComplementaryFoodMealEntity): Long
+
+    @Update
+    suspend fun updateComplementaryFoodMeal(meal: ComplementaryFoodMealEntity)
+
+    @Delete
+    suspend fun deleteComplementaryFoodMeal(meal: ComplementaryFoodMealEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMeals(meals: List<MealEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -69,6 +109,12 @@ interface AppDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTummySessions(sessions: List<TummySessionEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGrowthMeasurements(measurements: List<GrowthMeasurementEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertComplementaryFoodMeals(meals: List<ComplementaryFoodMealEntity>)
 
     @Query("DELETE FROM meals")
     suspend fun deleteAllMeals()
@@ -81,4 +127,13 @@ interface AppDao {
 
     @Query("DELETE FROM settings")
     suspend fun deleteAllSettings()
+
+    @Query("DELETE FROM child_profile")
+    suspend fun deleteChildProfile()
+
+    @Query("DELETE FROM growth_measurements")
+    suspend fun deleteAllGrowthMeasurements()
+
+    @Query("DELETE FROM complementary_food_meals")
+    suspend fun deleteAllComplementaryFoodMeals()
 }

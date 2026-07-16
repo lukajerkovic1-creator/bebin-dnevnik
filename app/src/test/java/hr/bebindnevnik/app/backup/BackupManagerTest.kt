@@ -1,14 +1,21 @@
 package hr.bebindnevnik.app.backup
 
 import hr.bebindnevnik.app.data.AppSnapshot
+import hr.bebindnevnik.app.data.ChildProfileEntity
+import hr.bebindnevnik.app.data.ChildSex
+import hr.bebindnevnik.app.data.ComplementaryFoodMealEntity
+import hr.bebindnevnik.app.data.ComplementaryFoodUnit
 import hr.bebindnevnik.app.data.DailyEntryEntity
+import hr.bebindnevnik.app.data.GrowthMeasurementEntity
 import hr.bebindnevnik.app.data.MealEntity
 import hr.bebindnevnik.app.data.SettingsEntity
 import hr.bebindnevnik.app.data.TernaryStatus
 import hr.bebindnevnik.app.data.TummyInputMethod
 import hr.bebindnevnik.app.data.TummySessionEntity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackupManagerTest {
@@ -20,6 +27,11 @@ class BackupManagerTest {
         assertEquals(snapshot.meals, preview.snapshot.meals)
         assertEquals(snapshot.dailyEntries, preview.snapshot.dailyEntries)
         assertEquals(snapshot.tummySessions, preview.snapshot.tummySessions)
+        assertEquals(snapshot.childProfile, preview.snapshot.childProfile)
+        assertEquals(snapshot.growthMeasurements, preview.snapshot.growthMeasurements)
+        assertEquals(snapshot.complementaryFoodMeals, preview.snapshot.complementaryFoodMeals)
+        assertEquals(1, preview.growthCount)
+        assertEquals(1, preview.complementaryFoodCount)
     }
 
     @Test fun `wrong password and modified file are rejected`() {
@@ -43,6 +55,27 @@ class BackupManagerTest {
         assertEquals(null, imported.dailyEntries.single().stoolCount)
         assertEquals(source.meals, imported.meals)
         assertEquals(source.tummySessions, imported.tummySessions)
+        assertNull(imported.childProfile)
+        assertTrue(imported.growthMeasurements.isEmpty())
+        assertTrue(imported.complementaryFoodMeals.isEmpty())
+    }
+
+    @Test fun `legacy version two backup imports without growth data`() {
+        val source = snapshot(1)
+        val encrypted = BackupManager.encryptWithVersion(source, "sigurna-šifra".toCharArray(), 2)
+        val imported = BackupManager.decrypt(encrypted, "sigurna-šifra".toCharArray()).snapshot
+        assertEquals(source.meals, imported.meals)
+        assertNull(imported.childProfile)
+        assertTrue(imported.growthMeasurements.isEmpty())
+        assertTrue(imported.complementaryFoodMeals.isEmpty())
+    }
+
+    @Test fun `legacy version three backup imports without complementary food data`() {
+        val source = snapshot(1)
+        val encrypted = BackupManager.encryptWithVersion(source, "sigurna-šifra".toCharArray(), 3)
+        val imported = BackupManager.decrypt(encrypted, "sigurna-šifra".toCharArray()).snapshot
+        assertEquals(source.growthMeasurements, imported.growthMeasurements)
+        assertTrue(imported.complementaryFoodMeals.isEmpty())
     }
 
     private fun snapshot(count: Int): AppSnapshot {
@@ -52,6 +85,9 @@ class BackupManagerTest {
             listOf(DailyEntryEntity("2026-01-02", TernaryStatus.DA, TernaryStatus.NE, true, now, now, 0)),
             listOf(TummySessionEntity(1, "2026-01-02", "09:00", 90, TummyInputMethod.RUCNO, now, now)),
             SettingsEntity(),
+            ChildProfileEntity(name = "Žana", sex = ChildSex.DJEVOJCICA, birthDate = "2026-01-01", gestationalWeeks = 35, gestationalDays = 4, createdAt = now, updatedAt = now),
+            listOf(GrowthMeasurementEntity(1, "2026-01-02", "10:00", 2_100, 44.2, headCircumferenceCm = 31.4, createdAt = now, updatedAt = now)),
+            listOf(ComplementaryFoodMealEntity(1, "2026-01-02", "11:00", listOf("mrkva", "krumpir"), 45, ComplementaryFoodUnit.G, now, now)),
         )
     }
 }

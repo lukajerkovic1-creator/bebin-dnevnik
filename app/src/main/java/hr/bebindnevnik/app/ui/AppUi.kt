@@ -141,6 +141,7 @@ private val navItems =
         NavItem("today", "Danas", BabyNavKind.TODAY),
         NavItem("calendar", "Kalendar", BabyNavKind.CALENDAR),
         NavItem("statistics", "Statistika", BabyNavKind.STATISTICS),
+        NavItem("growth", "Rast", BabyNavKind.GROWTH),
         NavItem("settings", "Postavke", BabyNavKind.SETTINGS),
     )
 
@@ -170,7 +171,12 @@ fun BebinDnevnikApp(
         viewModel.messages.collect { message ->
             val action =
                 when (message) {
-                    is UiMessage.MealDeleted, is UiMessage.TummyDeleted -> "Poništi"
+                    is UiMessage.MealDeleted,
+                    is UiMessage.TummyDeleted,
+                    is UiMessage.GrowthDeleted,
+                    is UiMessage.ComplementaryFoodDeleted,
+                    -> "Poništi"
+
                     is UiMessage.Text -> null
                 }
             undoMessage = message
@@ -276,6 +282,9 @@ fun BebinDnevnikApp(
                     },
                 )
             }
+            composable("growth") {
+                GrowthScreen(state = state, viewModel = viewModel)
+            }
             composable("settings") {
                 SettingsScreen(state, viewModel, notifications, onExplainPermission = { notificationExplanation = true })
             }
@@ -311,7 +320,7 @@ private fun Onboarding(
         Spacer(Modifier.height(20.dp))
         listOf(
             "Evidentirajte obroke, Waya kapi, vježbanje i tummy time.",
-            "Nema profila djeteta ni identifikacijskih podataka.",
+            "Profil djeteta i zapisi pohranjuju se u šifriranoj bazi bez korisničkog računa.",
             "Lokalna šifrirana baza glavni je izvor podataka i aplikacija radi bez interneta.",
             "Dobrovoljni šifrirani Google Drive backup štiti od deinstalacije, kvara ili gubitka uređaja.",
             "Dnevni podsjetnik je neobvezan i može se isključiti u Postavkama.",
@@ -345,7 +354,12 @@ private fun Onboarding(
         AlertDialog(
             onDismissRequest = { preview = null },
             title = { Text("Vratiti podatke?") },
-            text = { Text("Vratit će se ${data.mealCount} obroka, ${data.dailyCount} dnevnih evidencija i ${data.tummyCount} tummy-time sesija.") },
+            text = {
+                Text(
+                    "Vratit će se ${data.mealCount} mliječnih obroka, ${data.complementaryFoodCount} obroka dohrane, " +
+                        "${data.dailyCount} dnevnih evidencija, ${data.tummyCount} tummy-time sesija i ${data.growthCount} mjerenja rasta.",
+                )
+            },
             confirmButton = {
                 Button(onClick = {
                     viewModel.replaceAll(data.snapshot)
@@ -373,6 +387,9 @@ private fun TodayScreen(
     var newTummy by remember { mutableStateOf(false) }
     var deleteMeal by remember { mutableStateOf<MealEntity?>(null) }
     var deleteTummy by remember { mutableStateOf<TummySessionEntity?>(null) }
+    var complementaryFoodEditor by remember { mutableStateOf<hr.bebindnevnik.app.data.ComplementaryFoodMealEntity?>(null) }
+    var newComplementaryFood by remember { mutableStateOf(false) }
+    var deleteComplementaryFood by remember { mutableStateOf<hr.bebindnevnik.app.data.ComplementaryFoodMealEntity?>(null) }
     var stoolEditor by remember { mutableStateOf(false) }
     var stoolEditorDate by remember { mutableStateOf<LocalDate?>(null) }
     var resetConfirm by remember { mutableStateOf(false) }
@@ -382,7 +399,9 @@ private fun TodayScreen(
     val notificationVisible = !notifications.notificationsAllowed()
     val listState = rememberLazyListState()
 
-    val editorVisible = newMeal || mealDialog != null || newTummy || tummyDialog != null || stoolEditor
+    val editorVisible =
+        newMeal || mealDialog != null || newTummy || tummyDialog != null || stoolEditor ||
+            newComplementaryFood || complementaryFoodEditor != null
     LaunchedEffect(editorVisible, state.selectedDate) {
         viewModel.setEditorOpen(editorVisible, state.selectedDate.takeIf { editorVisible })
     }
@@ -396,6 +415,8 @@ private fun TodayScreen(
             newTummy = false
             tummyDialog = null
             stoolEditor = false
+            newComplementaryFood = false
+            complementaryFoodEditor = null
         }
     }
 
@@ -404,10 +425,10 @@ private fun TodayScreen(
         val baseIndex =
             when (target) {
                 "obrok" -> 1
-                "Waya kapi" -> 3
-                "vježbanje" -> 4
-                "stolica" -> 5
-                "tummy time" -> 6
+                "Waya kapi" -> 4
+                "vježbanje" -> 5
+                "stolica" -> 6
+                "tummy time" -> 7
                 else -> null
             }
         if (baseIndex != null) listState.animateScrollToItem(baseIndex + if (notificationVisible) 1 else 0)
@@ -448,6 +469,16 @@ private fun TodayScreen(
                     Text(AppLogic.elapsedText(LocalDate.parse(last.date), LocalTime.parse(last.time)))
                 }
             }
+        }
+        item {
+            ComplementaryFoodCard(
+                summary = state.complementaryFoodSummary,
+                meals = state.selectedComplementaryFoodMeals,
+                canEdit = canEdit,
+                onAdd = { newComplementaryFood = true },
+                onEdit = { complementaryFoodEditor = it },
+                onDelete = { deleteComplementaryFood = it },
+            )
         }
         item {
             HighlightCard("obrok" in highlight) {
@@ -567,7 +598,7 @@ private fun TodayScreen(
             }
         }
         item {
-            SummaryCard(state.summary)
+            SummaryCard(state.summary, state.complementaryFoodSummary)
             if (canEdit) TextButton(onClick = { resetConfirm = true }) { Text("Resetiraj dnevne statuse") }
         }
     }
@@ -601,6 +632,21 @@ private fun TodayScreen(
                 viewModel.acknowledgeDateRollover()
             },
             rolloverPreviousDate = state.rolloverPreviousDate,
+        )
+    }
+    if (newComplementaryFood || complementaryFoodEditor != null) {
+        ComplementaryFoodEditorSheet(
+            item = complementaryFoodEditor,
+            defaultDate = state.selectedDate,
+            today = state.currentLocalDate,
+            suggestions = viewModel.complementaryFoodSuggestions(),
+            validate = viewModel::complementaryFoodValidation,
+            onSave = viewModel::saveComplementaryFoodMeal,
+            onClose = {
+                newComplementaryFood = false
+                complementaryFoodEditor = null
+                viewModel.acknowledgeDateRollover()
+            },
         )
     }
     if (timer.phase == TimerPhase.CONFIRMING && state.rolloverPreviousDate == null) {
@@ -656,6 +702,16 @@ private fun TodayScreen(
             deleteTummy =
                 null
         })
+    }
+    deleteComplementaryFood?.let { item ->
+        ConfirmDelete(
+            "Obrisati ovaj obrok dohrane?",
+            {
+                viewModel.deleteComplementaryFoodMeal(item)
+                deleteComplementaryFood = null
+            },
+            { deleteComplementaryFood = null },
+        )
     }
     if (resetConfirm) {
         AlertDialog(
@@ -841,26 +897,31 @@ private fun EntryRow(
 }
 
 @Composable
-private fun SummaryCard(summary: DaySummary) =
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(BabyDimensions.CardCorner),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = .55f)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.padding(BabyDimensions.CardPadding), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            IllustratedSectionTitle("Dnevni sažetak", BabyIllustrationKind.JOURNAL)
-            Text("Ukupno: ${summary.totalMl} ml")
-            Text("Broj obroka: ${summary.mealCount}")
-            Text("Prosječno: ${"%.1f".format(summary.averageMl)} ml")
-            Text("Posljednji obrok: ${summary.lastMealTime?.hrStoredTime() ?: "Nije evidentirano"}")
-            Text("Waya kapi: ${summary.waya.label()}")
-            Text("Vježbanje: ${summary.exercise.label()}")
-            Text("Stolica: ${stoolCountText(summary.stoolCount)}")
-            Text("Tummy time: ${summary.tummySeconds.durationText()} (${summary.tummyCount} sesija)")
-            Text("Status dana: ${dayStatusLabel(summary.status)}", fontWeight = FontWeight.Bold)
-        }
+private fun SummaryCard(
+    summary: DaySummary,
+    complementaryFood: hr.bebindnevnik.app.data.ComplementaryFoodDaySummary,
+) = Card(
+    Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(BabyDimensions.CardCorner),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = .55f)),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+) {
+    Column(Modifier.padding(BabyDimensions.CardPadding), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        IllustratedSectionTitle("Dnevni sažetak", BabyIllustrationKind.JOURNAL)
+        Text("Ukupno: ${summary.totalMl} ml")
+        Text("Broj obroka: ${summary.mealCount}")
+        Text("Dohrana: ${complementaryFood.mealCount} obroka")
+        if (complementaryFood.totalG > 0) Text("Dohrana ukupno: ${complementaryFood.totalG} g")
+        if (complementaryFood.totalMl > 0) Text("Dohrana ukupno: ${complementaryFood.totalMl} ml")
+        Text("Prosječno: ${"%.1f".format(summary.averageMl)} ml")
+        Text("Posljednji obrok: ${summary.lastMealTime?.hrStoredTime() ?: "Nije evidentirano"}")
+        Text("Waya kapi: ${summary.waya.label()}")
+        Text("Vježbanje: ${summary.exercise.label()}")
+        Text("Stolica: ${stoolCountText(summary.stoolCount)}")
+        Text("Tummy time: ${summary.tummySeconds.durationText()} (${summary.tummyCount} sesija)")
+        Text("Status dana: ${dayStatusLabel(summary.status)}", fontWeight = FontWeight.Bold)
     }
+}
 
 @Composable
 internal fun StatusBadge(status: DayStatus) {
@@ -1284,7 +1345,7 @@ private fun SettingsScreen(
                 null
             ) {
                 scope.launch {
-                    val bytes = withContext(Dispatchers.Default) { CsvExporter.createZip(viewModel.snapshot()) }
+                    val bytes = withContext(Dispatchers.Default) { viewModel.csvExport() }
                     context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
                 }
             }
@@ -1400,7 +1461,9 @@ private fun SettingsScreen(
             title = { Text("Zamijeniti sve podatke?") },
             text = {
                 Text(
-                    "Uvest će se ${data.mealCount} obroka, ${data.tummyCount} tummy-time sesija i ${data.dailyCount} dnevnih evidencija. Svi postojeći podaci bit će potpuno zamijenjeni. Radnja se ne može poništiti.",
+                    "Uvest će se ${data.mealCount} mliječnih obroka, ${data.complementaryFoodCount} obroka dohrane, " +
+                        "${data.tummyCount} tummy-time sesija, ${data.growthCount} mjerenja rasta i ${data.dailyCount} dnevnih evidencija. " +
+                        "Svi postojeći podaci bit će potpuno zamijenjeni. Radnja se ne može poništiti.",
                 )
             },
             confirmButton = {

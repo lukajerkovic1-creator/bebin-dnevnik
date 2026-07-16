@@ -3,7 +3,13 @@ package hr.bebindnevnik.app.backup
 import hr.bebindnevnik.app.BuildConfig
 import hr.bebindnevnik.app.data.AppSnapshot
 import hr.bebindnevnik.app.data.AppTheme
+import hr.bebindnevnik.app.data.ChildProfileEntity
+import hr.bebindnevnik.app.data.ChildSex
+import hr.bebindnevnik.app.data.ComplementaryFoodMealEntity
+import hr.bebindnevnik.app.data.ComplementaryFoodUnit
 import hr.bebindnevnik.app.data.DailyEntryEntity
+import hr.bebindnevnik.app.data.GrowthMeasurementEntity
+import hr.bebindnevnik.app.data.LengthMeasurementType
 import hr.bebindnevnik.app.data.MealEntity
 import hr.bebindnevnik.app.data.SettingsEntity
 import hr.bebindnevnik.app.data.TernaryStatus
@@ -29,6 +35,8 @@ data class BackupPreview(
     val mealCount: Int,
     val dailyCount: Int,
     val tummyCount: Int,
+    val growthCount: Int,
+    val complementaryFoodCount: Int = 0,
 )
 
 class InvalidBackupException(
@@ -39,7 +47,7 @@ class InvalidBackupException(
 @Suppress("TooManyFunctions")
 object BackupManager {
     private val magic = byteArrayOf(0x42, 0x44, 0x4B, 0x31)
-    private const val FORMAT_VERSION = 2
+    private const val FORMAT_VERSION = 4
     private const val ITERATIONS = 310_000
     private const val SALT_BYTES = 16
     private const val NONCE_BYTES = 12
@@ -124,7 +132,14 @@ object BackupManager {
                     }
                 return try {
                     val snapshot = snapshotFromJson(String(plain, Charsets.UTF_8), version)
-                    BackupPreview(snapshot, snapshot.meals.size, snapshot.dailyEntries.size, snapshot.tummySessions.size)
+                    BackupPreview(
+                        snapshot,
+                        snapshot.meals.size,
+                        snapshot.dailyEntries.size,
+                        snapshot.tummySessions.size,
+                        snapshot.growthMeasurements.size,
+                        snapshot.complementaryFoodMeals.size,
+                    )
                 } finally {
                     plain.fill(0)
                 }
@@ -159,8 +174,11 @@ object BackupManager {
 
     internal fun snapshotFromJson(
         json: String,
-        formatVersion: Int = FORMAT_VERSION,
-    ): AppSnapshot = JSONObject(json).toSnapshot(formatVersion)
+        formatVersion: Int? = null,
+    ): AppSnapshot {
+        val content = JSONObject(json)
+        return content.toSnapshot(formatVersion ?: content.getInt("formatVersion"))
+    }
 
     private fun AppSnapshot.toJson(formatVersion: Int) =
         JSONObject().apply {
@@ -171,6 +189,13 @@ object BackupManager {
             put("dailyEntries", JSONArray().apply { dailyEntries.forEach { put(it.toJson(formatVersion)) } })
             put("tummySessions", JSONArray().apply { tummySessions.forEach { put(it.toJson()) } })
             put("settings", settings.toJson())
+            if (formatVersion >= 3) {
+                put("childProfile", childProfile?.toJson() ?: JSONObject.NULL)
+                put("growthMeasurements", JSONArray().apply { growthMeasurements.forEach { put(it.toJson()) } })
+            }
+            if (formatVersion >= 4) {
+                put("complementaryFoodMeals", JSONArray().apply { complementaryFoodMeals.forEach { put(it.toJson()) } })
+            }
         }
 
     private fun MealEntity.toJson() =
@@ -211,6 +236,45 @@ object BackupManager {
             put("reminderTime", reminderTime)
             put("theme", theme.name)
             put("onboardingShown", onboardingShown)
+        }
+
+    private fun ChildProfileEntity.toJson() =
+        JSONObject().apply {
+            put("name", name)
+            put("sex", sex.name)
+            put("birthDate", birthDate)
+            put("gestationalWeeks", gestationalWeeks)
+            put("gestationalDays", gestationalDays)
+            put("birthWeightG", birthWeightG ?: JSONObject.NULL)
+            put("birthLengthCm", birthLengthCm ?: JSONObject.NULL)
+            put("birthHeadCircumferenceCm", birthHeadCircumferenceCm ?: JSONObject.NULL)
+            put("createdAt", createdAt)
+            put("updatedAt", updatedAt)
+        }
+
+    private fun GrowthMeasurementEntity.toJson() =
+        JSONObject().apply {
+            put("id", id)
+            put("date", date)
+            put("time", time)
+            put("weightG", weightG ?: JSONObject.NULL)
+            put("lengthHeightCm", lengthHeightCm ?: JSONObject.NULL)
+            put("lengthMeasurementType", lengthMeasurementType.name)
+            put("headCircumferenceCm", headCircumferenceCm ?: JSONObject.NULL)
+            put("createdAt", createdAt)
+            put("updatedAt", updatedAt)
+        }
+
+    private fun ComplementaryFoodMealEntity.toJson() =
+        JSONObject().apply {
+            put("id", id)
+            put("date", date)
+            put("time", time)
+            put("ingredients", JSONArray(ingredients))
+            put("amount", amount)
+            put("unit", unit.name)
+            put("createdAt", createdAt)
+            put("updatedAt", updatedAt)
         }
 
     private fun JSONObject.toSnapshot(headerVersion: Int): AppSnapshot {
@@ -261,8 +325,68 @@ object BackupManager {
                 theme = AppTheme.valueOf(config.getString("theme")),
                 onboardingShown = config.getBoolean("onboardingShown"),
             )
-        return AppSnapshot(meals, entries, sessions, settings)
+        val profile =
+            if (contentVersion >= 3 && !isNull("childProfile")) {
+                getJSONObject("childProfile").let { item ->
+                    ChildProfileEntity(
+                        name = item.getString("name"),
+                        sex = ChildSex.valueOf(item.getString("sex")),
+                        birthDate = item.getString("birthDate"),
+                        gestationalWeeks = item.getInt("gestationalWeeks"),
+                        gestationalDays = item.getInt("gestationalDays"),
+                        birthWeightG = item.optNullableInt("birthWeightG"),
+                        birthLengthCm = item.optNullableDouble("birthLengthCm"),
+                        birthHeadCircumferenceCm = item.optNullableDouble("birthHeadCircumferenceCm"),
+                        createdAt = item.getLong("createdAt"),
+                        updatedAt = item.getLong("updatedAt"),
+                    )
+                }
+            } else {
+                null
+            }
+        val growth =
+            if (contentVersion >= 3) {
+                getJSONArray("growthMeasurements").mapObjects { item ->
+                    GrowthMeasurementEntity(
+                        id = item.getLong("id"),
+                        date = item.getString("date"),
+                        time = item.getString("time"),
+                        weightG = item.optNullableInt("weightG"),
+                        lengthHeightCm = item.optNullableDouble("lengthHeightCm"),
+                        lengthMeasurementType = LengthMeasurementType.valueOf(item.getString("lengthMeasurementType")),
+                        headCircumferenceCm = item.optNullableDouble("headCircumferenceCm"),
+                        createdAt = item.getLong("createdAt"),
+                        updatedAt = item.getLong("updatedAt"),
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        val complementaryFood =
+            if (contentVersion >= 4) {
+                getJSONArray("complementaryFoodMeals").mapObjects { item ->
+                    ComplementaryFoodMealEntity(
+                        id = item.getLong("id"),
+                        date = item.getString("date"),
+                        time = item.getString("time"),
+                        ingredients = item.getJSONArray("ingredients").mapStrings(),
+                        amount = item.getInt("amount"),
+                        unit = ComplementaryFoodUnit.valueOf(item.getString("unit")),
+                        createdAt = item.getLong("createdAt"),
+                        updatedAt = item.getLong("updatedAt"),
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        return AppSnapshot(meals, entries, sessions, settings, profile, growth, complementaryFood)
     }
 
+    private fun JSONObject.optNullableInt(name: String): Int? = if (isNull(name)) null else getInt(name)
+
+    private fun JSONObject.optNullableDouble(name: String): Double? = if (isNull(name)) null else getDouble(name)
+
     private fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> = List(length()) { transform(getJSONObject(it)) }
+
+    private fun JSONArray.mapStrings(): List<String> = List(length()) { getString(it) }
 }

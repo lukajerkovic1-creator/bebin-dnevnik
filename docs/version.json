@@ -1,6 +1,6 @@
 {
-  "versionCode": 2,
-  "versionName": "1.1.0",
+  "versionCode": 1005000,
+  "versionName": "1.5.0",
   "downloadUrl": "https://lukajerkovic1-creator.github.io/bebin-dnevnik/download/",
-  "releaseNotes": "Automatski prijelaz na novi dan, sigurno uređivanje prošlih zapisa i zaštita nezavršenih unosa pri ponoći."
+  "releaseNotes": "Profil i praćenje rasta djeteta, WHO krivulje rasta te nova odvojena evidencija dohrane s namirnicama, gramima i mililitrima."
 }

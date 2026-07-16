@@ -2,6 +2,8 @@ package hr.bebindnevnik.app.cloud
 
 import hr.bebindnevnik.app.backup.InvalidBackupException
 import hr.bebindnevnik.app.data.AppSnapshot
+import hr.bebindnevnik.app.data.ComplementaryFoodMealEntity
+import hr.bebindnevnik.app.data.ComplementaryFoodUnit
 import hr.bebindnevnik.app.data.DailyEntryEntity
 import hr.bebindnevnik.app.data.MealEntity
 import hr.bebindnevnik.app.data.SettingsEntity
@@ -23,6 +25,7 @@ class CloudBackupCodecTest {
         assertEquals(1, decoded.metadata.mealCount)
         assertEquals(1, decoded.metadata.dailyCount)
         assertEquals(1, decoded.metadata.tummyCount)
+        assertEquals(1, decoded.metadata.complementaryFoodCount)
         assertEquals(3, decoded.metadata.schemaVersion)
     }
 
@@ -53,6 +56,10 @@ class CloudBackupCodecTest {
             listOf(DailyEntryEntity("2026-01-02", TernaryStatus.DA, TernaryStatus.NE, false, now, now, 2)),
             listOf(TummySessionEntity(1, "2026-01-02", "09:00", 90, TummyInputMethod.RUCNO, now, now)),
             SettingsEntity(reminderEnabled = false, reminderTime = "19:00", onboardingShown = true),
+            complementaryFoodMeals =
+                listOf(
+                    ComplementaryFoodMealEntity(1, "2026-01-02", "12:00", listOf("mrkva"), 20, ComplementaryFoodUnit.G, now, now),
+                ),
         )
     }
 }

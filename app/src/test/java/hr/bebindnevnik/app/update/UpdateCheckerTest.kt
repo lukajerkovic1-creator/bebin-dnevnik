@@ -41,4 +41,11 @@ class UpdateCheckerTest {
         assertTrue(ApkVerificationRules.validate(installed.copy(packageName = "other.app", versionCode = 6), installed, certificate) is ApkValidation.Invalid)
         assertTrue(ApkVerificationRules.validate(installed.copy(versionCode = 6, certificateSha256 = "00"), installed, certificate) is ApkValidation.Invalid)
     }
+
+    @Test fun semanticTagProvidesMonotonicFallbackWhenPagesManifestIsStale() {
+        assertEquals(1_005_000, UpdateChecker.semanticVersionCode("1.5.0"))
+        assertEquals(2_010_003, UpdateChecker.semanticVersionCode("2.10.3"))
+        assertThrows(IllegalArgumentException::class.java) { UpdateChecker.semanticVersionCode("1.5") }
+        assertThrows(IllegalArgumentException::class.java) { UpdateChecker.semanticVersionCode("1.1000.0") }
+    }
 }

@@ -6,6 +6,8 @@ import hr.bebindnevnik.app.cloud.CloudBackupPreferences
 import hr.bebindnevnik.app.cloud.CloudBackupWorker
 import hr.bebindnevnik.app.data.AppDatabase
 import hr.bebindnevnik.app.data.AppRepository
+import hr.bebindnevnik.app.domain.growth.GrowthCalculator
+import hr.bebindnevnik.app.domain.growth.WhoGrowthReference
 import hr.bebindnevnik.app.notifications.NotificationHelper
 import hr.bebindnevnik.app.notifications.ReminderScheduler
 import hr.bebindnevnik.app.notifications.TimerController
@@ -26,6 +28,9 @@ class AppContainer(
     val notifications = NotificationHelper(appContext)
     val reminderScheduler = ReminderScheduler(appContext)
     val timerController: TimerController
+    val growthCalculator: GrowthCalculator by lazy {
+        GrowthCalculator(WhoGrowthReference.fromAssets(appContext.assets))
+    }
 
     init {
         System.loadLibrary("sqlcipher")
@@ -35,8 +40,12 @@ class AppContainer(
                 Room
                     .databaseBuilder(appContext, AppDatabase::class.java, "bebin-dnevnik.db")
                     .openHelperFactory(SupportOpenHelperFactory(passphrase.copyOf()))
-                    .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
-                    .build()
+                    .addMigrations(
+                        AppDatabase.MIGRATION_1_2,
+                        AppDatabase.MIGRATION_2_3,
+                        AppDatabase.MIGRATION_3_4,
+                        AppDatabase.MIGRATION_4_5,
+                    ).build()
             // Otvori bazu odmah: migracijska pogreška mora završiti u recovery UI-ju,
             // a ne izgledati kao prazna aplikacija dok prvi upit ne uspije.
             database.openHelper.writableDatabase

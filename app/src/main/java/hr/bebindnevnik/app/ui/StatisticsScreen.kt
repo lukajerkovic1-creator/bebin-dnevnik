@@ -1,4 +1,5 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:Suppress("TooManyFunctions")
 
 package hr.bebindnevnik.app.ui
 
@@ -106,6 +107,7 @@ internal fun EnhancedStatisticsScreen(
         }
         item { PeriodOverviewCard(report) }
         item { FeedingSummaryCard(report) }
+        item { ComplementaryFoodSummaryCard(report) }
         item { TummySummaryCard(report) }
         item { StoolSummaryCard(report) }
         item { HabitsSummaryCard(report) }
@@ -123,6 +125,21 @@ internal fun EnhancedStatisticsScreen(
         } else {
             item { FeedingChart(report.days, onOpenDay) }
             item { MealTimeDistribution(report) }
+        }
+        item {
+            StatisticsSectionTitle("Dohrana", "Obroci, količine i evidentirane namirnice", BabyIllustrationKind.FOOD)
+        }
+        if (report.complementaryFood.mealCount == 0) {
+            item {
+                StatisticsEmptyState(
+                    "Dohrana još nije evidentirana u odabranom razdoblju.",
+                    BabyIllustrationKind.FOOD,
+                    onOpenDay,
+                )
+            }
+        } else {
+            item { ComplementaryFoodChart(report, onOpenDay) }
+            item { ComplementaryFoodIngredientsCard(report) }
         }
         item {
             StatisticsSectionTitle("Tummy time", "Trajanje i broj evidentiranih sesija", BabyIllustrationKind.TUMMY)
@@ -309,6 +326,18 @@ private fun FeedingSummaryCard(report: StatisticsReport) =
     }
 
 @Composable
+private fun ComplementaryFoodSummaryCard(report: StatisticsReport) =
+    StatisticsSummaryCard("Dohrana", BabyIllustrationKind.FOOD) {
+        val food = report.complementaryFood
+        SummaryLine("Broj obroka", food.mealCount.toString())
+        SummaryLine("Dani s barem jednim obrokom", food.recordedDays.toString())
+        SummaryLine("Ukupno u gramima", "${food.totalG} g")
+        SummaryLine("Ukupno u mililitrima", "${food.totalMl} ml")
+        SummaryLine("Prosjek obroka u gramima", "${food.averageGPerMeal.hrDecimal()} g")
+        SummaryLine("Prosjek obroka u mililitrima", "${food.averageMlPerMeal.hrDecimal()} ml")
+    }
+
+@Composable
 private fun TummySummaryCard(report: StatisticsReport) =
     StatisticsSummaryCard("Tummy time", BabyIllustrationKind.TUMMY) {
         val tummy = report.tummy
@@ -432,6 +461,71 @@ private fun FeedingChart(
 }
 
 @Composable
+private fun ComplementaryFoodChart(
+    report: StatisticsReport,
+    onOpenDay: (LocalDate) -> Unit,
+) {
+    var mode by rememberSaveable { mutableIntStateOf(0) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(3) { index ->
+                val labels = listOf("Broj obroka", "Ukupno g", "Ukupno ml")
+                FilterChip(mode == index, { mode = index }, { Text(labels[index], maxLines = 1) })
+            }
+        }
+        val points =
+            report.complementaryFood.days.map { day ->
+                val value =
+                    if (day.meals.isEmpty()) {
+                        null
+                    } else {
+                        when (mode) {
+                            0 -> day.meals.size.toFloat()
+                            1 -> day.totalG.toFloat()
+                            else -> day.totalMl.toFloat()
+                        }
+                    }
+                val mealDetails =
+                    day.meals.joinToString("; ") {
+                        "${it.time.hrStoredTime()} ${it.ingredients.joinToString(" + ")} ${it.amount} ${it.unit.name.lowercase()}"
+                    }
+                StatisticsChartPoint(
+                    day.date,
+                    value,
+                    "${day.date.hrDate()} · ${day.meals.size} obroka · ${day.totalG} g · ${day.totalMl} ml · $mealDetails",
+                )
+            }
+        InteractiveBarChart(
+            "Dohrana po danu",
+            points,
+            "Neevidentirani dan nije obrok od 0 g.",
+            onOpenDay,
+            "complementary-food-chart",
+        )
+    }
+}
+
+@Composable
+private fun ComplementaryFoodIngredientsCard(report: StatisticsReport) {
+    val food = report.complementaryFood
+    Card(Modifier.fillMaxWidth().testTag("complementary-food-ingredients")) {
+        Column(Modifier.padding(BabyDimensions.CardPadding), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Namirnice", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            SummaryLine("Različitih namirnica", food.differentIngredientCount.toString())
+            Text("Najčešće evidentirane", style = MaterialTheme.typography.labelLarge)
+            food.ingredientFrequencies.take(8).forEach { item -> SummaryLine(item.name, "${item.count} puta") }
+            Text("Posljednje uvedene", style = MaterialTheme.typography.labelLarge)
+            food.recentlyIntroduced.take(8).forEach { item -> SummaryLine(item.name, item.firstRecordedDate.hrDate()) }
+            Text(
+                "Prikaz je evidencijski i ne procjenjuje kvalitetu prehrane ni dovoljnost unosa.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun TummyChart(
     days: List<StatisticsDay>,
     onOpenDay: (LocalDate) -> Unit,
@@ -537,7 +631,10 @@ private fun InteractiveBarChart(
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(points[selected].detail, Modifier.weight(1f))
-                        IconButton({ onOpenDay(points[selected].date) }) {
+                        IconButton(
+                            onClick = { onOpenDay(points[selected].date) },
+                            modifier = Modifier.testTag("$tag-open-day"),
+                        ) {
                             Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Otvori ${points[selected].date.hrDate()}")
                         }
                     }

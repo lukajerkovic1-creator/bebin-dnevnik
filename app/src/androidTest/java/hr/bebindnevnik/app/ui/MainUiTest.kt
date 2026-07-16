@@ -67,14 +67,16 @@ class MainUiTest {
         rule.onNode(hasScrollAction()).performScrollToNode(hasText("Podaci i sigurnosne kopije"))
         rule.onNodeWithText("Podaci i sigurnosne kopije").assertIsDisplayed()
         rule.onNodeWithText("Danas").performClick()
-        rule.onNodeWithText("Dodaj obrok").assertIsDisplayed()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("add-meal"))
+        rule.onNodeWithTag("add-meal").assertIsDisplayed()
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, rule.activity.requestedOrientation)
     }
 
     @Test fun mealQuickButtonsManualInputAndValidationDialogAreReachable() {
         finishOnboardingIfNeeded()
         rule.onAllNodesWithTag("illustration-bottle")[0].assertExists()
-        rule.onNodeWithText("Dodaj obrok").performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("add-meal"))
+        rule.onNodeWithTag("add-meal").performClick()
         rule.onNodeWithText("80 ml").assertIsEnabled().performClick()
         rule.onNodeWithText("Spremi").assertIsEnabled()
         rule.onNodeWithText("Odustani").performClick()
@@ -97,12 +99,14 @@ class MainUiTest {
         rule.onNodeWithTag("unlock-past-day").performClick()
         rule.onNodeWithTag("confirm-unlock-past-day").performClick()
         rule.onNodeWithTag("past-day-edit-mode").assertIsDisplayed()
-        rule.onNodeWithText("Dodaj obrok").performScrollTo().performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("add-meal"))
+        rule.onNodeWithTag("add-meal").performClick()
         rule.waitUntil(timeoutMillis = 10_000) {
             rule.onAllNodesWithTag("date-row").fetchSemanticsNodes().isNotEmpty()
         }
         rule.onNodeWithTag("date-row").assertTextContains(past.hrDate())
         rule.onNodeWithText("Odustani").performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("go-today"))
         rule.onNodeWithTag("go-today").performClick()
         rule.onNodeWithTag("day-selector").assertTextContains("Danas")
         rule.onNodeWithTag("next-day").assertIsNotEnabled()
@@ -152,7 +156,8 @@ class MainUiTest {
 
     @Test fun accessibilityDescriptionsExistForEditAndDeleteAfterDataEntry() {
         finishOnboardingIfNeeded()
-        rule.onNodeWithText("Dodaj obrok").performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("add-meal"))
+        rule.onNodeWithTag("add-meal").performClick()
         rule.onNodeWithText("40 ml").performClick()
         rule.onNodeWithText("Spremi").performClick()
         rule.waitUntil(timeoutMillis = 30_000) {

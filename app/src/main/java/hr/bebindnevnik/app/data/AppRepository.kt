@@ -17,7 +17,14 @@ class AppRepository(
     val dailyEntries: Flow<List<DailyEntryEntity>> = dao.observeDailyEntries()
     val tummySessions: Flow<List<TummySessionEntity>> = dao.observeTummySessions()
     val settings: Flow<SettingsEntity> = dao.observeSettings().filterNotNull()
-    val snapshot: Flow<AppSnapshot> = combine(meals, dailyEntries, tummySessions, settings, ::AppSnapshot)
+    val childProfile: Flow<ChildProfileEntity?> = dao.observeChildProfile()
+    val growthMeasurements: Flow<List<GrowthMeasurementEntity>> = dao.observeGrowthMeasurements()
+    val complementaryFoodMeals: Flow<List<ComplementaryFoodMealEntity>> = dao.observeComplementaryFoodMeals()
+    private val diarySnapshot: Flow<AppSnapshot> = combine(meals, dailyEntries, tummySessions, settings, ::AppSnapshot)
+    val snapshot: Flow<AppSnapshot> =
+        combine(diarySnapshot, childProfile, growthMeasurements, complementaryFoodMeals) { diary, profile, growth, food ->
+            diary.copy(childProfile = profile, growthMeasurements = growth, complementaryFoodMeals = food)
+        }
 
     suspend fun initialize() {
         if (dao.settings() == null) dao.putSettings(SettingsEntity())
@@ -152,12 +159,77 @@ class AppRepository(
         onDataChanged()
     }
 
+    suspend fun saveChildProfile(profile: ChildProfileEntity) {
+        val old = dao.childProfile()
+        val now = System.currentTimeMillis()
+        dao.putChildProfile(
+            profile.copy(
+                id = 1,
+                createdAt = old?.createdAt ?: profile.createdAt.takeIf { it > 0 } ?: now,
+                updatedAt = now,
+            ),
+        )
+        onDataChanged()
+    }
+
+    suspend fun addGrowthMeasurement(measurement: GrowthMeasurementEntity): GrowthMeasurementEntity {
+        val now = System.currentTimeMillis()
+        val item = measurement.copy(id = 0, createdAt = now, updatedAt = now)
+        return item.copy(id = dao.insertGrowthMeasurement(item)).also { onDataChanged() }
+    }
+
+    suspend fun updateGrowthMeasurement(measurement: GrowthMeasurementEntity) {
+        dao.updateGrowthMeasurement(measurement.copy(updatedAt = System.currentTimeMillis()))
+        onDataChanged()
+    }
+
+    suspend fun deleteGrowthMeasurement(measurement: GrowthMeasurementEntity) {
+        dao.deleteGrowthMeasurement(measurement)
+        onDataChanged()
+    }
+
+    suspend fun restoreGrowthMeasurement(measurement: GrowthMeasurementEntity) {
+        dao.insertGrowthMeasurements(listOf(measurement))
+        onDataChanged()
+    }
+
+    suspend fun addComplementaryFoodMeal(meal: ComplementaryFoodMealEntity): ComplementaryFoodMealEntity {
+        val now = System.currentTimeMillis()
+        val item = meal.copy(id = 0, createdAt = now, updatedAt = now)
+        return item.copy(id = dao.insertComplementaryFoodMeal(item)).also { onDataChanged() }
+    }
+
+    suspend fun updateComplementaryFoodMeal(meal: ComplementaryFoodMealEntity) {
+        dao.updateComplementaryFoodMeal(meal.copy(updatedAt = System.currentTimeMillis()))
+        onDataChanged()
+    }
+
+    suspend fun deleteComplementaryFoodMeal(meal: ComplementaryFoodMealEntity) {
+        dao.deleteComplementaryFoodMeal(meal)
+        onDataChanged()
+    }
+
+    suspend fun restoreComplementaryFoodMeal(meal: ComplementaryFoodMealEntity) {
+        dao.insertComplementaryFoodMeals(listOf(meal))
+        onDataChanged()
+    }
+
+    suspend fun deleteGrowthProfileAndMeasurements() =
+        database
+            .withTransaction {
+                dao.deleteAllGrowthMeasurements()
+                dao.deleteChildProfile()
+            }.also { onDataChanged() }
+
     suspend fun currentSnapshot(): AppSnapshot =
         AppSnapshot(
             dao.allMeals(),
             dao.allDailyEntries(),
             dao.allTummySessions(),
             dao.settings() ?: SettingsEntity(),
+            dao.childProfile(),
+            dao.allGrowthMeasurements(),
+            dao.allComplementaryFoodMeals(),
         )
 
     suspend fun summary(date: LocalDate): DaySummary {
@@ -168,14 +240,25 @@ class AppRepository(
     suspend fun replaceAll(snapshot: AppSnapshot) =
         database
             .withTransaction {
+                require(
+                    snapshot.complementaryFoodMeals.all { meal ->
+                        meal.amount >= 0 && meal.ingredients.any { it.isNotBlank() }
+                    },
+                ) { "Sigurnosna kopija sadrži nevažeći obrok dohrane." }
                 dao.deleteAllMeals()
                 dao.deleteAllDailyEntries()
                 dao.deleteAllTummySessions()
                 dao.deleteAllSettings()
+                dao.deleteAllGrowthMeasurements()
+                dao.deleteAllComplementaryFoodMeals()
+                dao.deleteChildProfile()
                 dao.insertMeals(snapshot.meals)
                 dao.insertDailyEntries(snapshot.dailyEntries)
                 dao.insertTummySessions(snapshot.tummySessions)
                 dao.putSettings(snapshot.settings.copy(id = 1, lastNotificationDate = null))
+                snapshot.childProfile?.let { dao.putChildProfile(it.copy(id = 1)) }
+                dao.insertGrowthMeasurements(snapshot.growthMeasurements)
+                dao.insertComplementaryFoodMeals(snapshot.complementaryFoodMeals)
             }.also { onDataChanged() }
 
     suspend fun deleteAll() =
@@ -185,6 +268,9 @@ class AppRepository(
                 dao.deleteAllDailyEntries()
                 dao.deleteAllTummySessions()
                 dao.deleteAllSettings()
+                dao.deleteAllGrowthMeasurements()
+                dao.deleteAllComplementaryFoodMeals()
+                dao.deleteChildProfile()
                 dao.putSettings(SettingsEntity(onboardingShown = true))
             }.also { onDataChanged() }
 }

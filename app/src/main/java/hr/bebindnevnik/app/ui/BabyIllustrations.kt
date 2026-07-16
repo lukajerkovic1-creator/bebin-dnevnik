@@ -24,6 +24,7 @@ internal enum class BabyIllustrationKind {
     EXERCISE,
     STOOL,
     TUMMY,
+    FOOD,
     JOURNAL,
 }
 
@@ -31,6 +32,7 @@ internal enum class BabyNavKind {
     TODAY,
     CALENDAR,
     STATISTICS,
+    GROWTH,
     SETTINGS,
 }
 
@@ -69,6 +71,7 @@ internal fun BabyIllustration(
             BabyIllustrationKind.EXERCISE -> drawExercise(colors)
             BabyIllustrationKind.STOOL -> drawStool(colors)
             BabyIllustrationKind.TUMMY -> drawTummy(colors)
+            BabyIllustrationKind.FOOD -> drawFood(colors)
             BabyIllustrationKind.JOURNAL -> drawJournal(colors)
         }
     }
@@ -111,6 +114,14 @@ internal fun BabyNavIcon(
                 drawRoundRect(color, Offset(size.width * .2f, size.height * .56f), Size(size.width * .13f, size.height * .25f), CornerRadius(4f))
                 drawRoundRect(color, Offset(size.width * .43f, size.height * .38f), Size(size.width * .13f, size.height * .43f), CornerRadius(4f))
                 drawRoundRect(color, Offset(size.width * .66f, size.height * .2f), Size(size.width * .13f, size.height * .61f), CornerRadius(4f))
+            }
+
+            BabyNavKind.GROWTH -> {
+                drawLine(color, Offset(size.width * .2f, size.height * .78f), Offset(size.width * .78f, size.height * .2f), stroke.width, StrokeCap.Round)
+                drawCircle(color, size.width * .07f, Offset(size.width * .26f, size.height * .66f), style = stroke)
+                drawCircle(color, size.width * .07f, Offset(size.width * .48f, size.height * .5f), style = stroke)
+                drawCircle(color, size.width * .07f, Offset(size.width * .7f, size.height * .3f), style = stroke)
+                drawLine(color, Offset(size.width * .18f, size.height * .82f), Offset(size.width * .82f, size.height * .82f), stroke.width)
             }
 
             BabyNavKind.SETTINGS -> {
@@ -248,6 +259,37 @@ private fun DrawScope.drawStar(
 ) {
     drawLine(color, Offset(center.x - radius, center.y), Offset(center.x + radius, center.y), radius * .34f, StrokeCap.Round)
     drawLine(color, Offset(center.x, center.y - radius), Offset(center.x, center.y + radius), radius * .34f, StrokeCap.Round)
+}
+
+private fun DrawScope.drawFood(colors: IllustrationColors) {
+    val w = size.width
+    val h = size.height
+    drawCircle(colors.soft.copy(alpha = .58f), w * .43f, Offset(w * .5f, h * .52f))
+    drawOval(colors.milk, Offset(w * .2f, h * .5f), Size(w * .5f, h * .28f))
+    drawArc(
+        color = colors.primary,
+        startAngle = 0f,
+        sweepAngle = 180f,
+        useCenter = true,
+        topLeft = Offset(w * .2f, h * .48f),
+        size = Size(w * .5f, h * .35f),
+    )
+    drawOval(colors.skin, Offset(w * .27f, h * .47f), Size(w * .36f, h * .11f))
+    drawLine(colors.strong, Offset(w * .63f, h * .48f), Offset(w * .84f, h * .24f), w * .05f, StrokeCap.Round)
+    drawOval(colors.milk, Offset(w * .55f, h * .42f), Size(w * .16f, h * .1f))
+    val carrot =
+        Path().apply {
+            moveTo(w * .2f, h * .26f)
+            lineTo(w * .35f, h * .34f)
+            lineTo(w * .23f, h * .49f)
+            close()
+        }
+    drawPath(carrot, Color(0xFFF3A35C))
+    drawLine(colors.accent, Offset(w * .22f, h * .28f), Offset(w * .17f, h * .19f), w * .035f, StrokeCap.Round)
+    drawLine(colors.accent, Offset(w * .24f, h * .27f), Offset(w * .28f, h * .17f), w * .035f, StrokeCap.Round)
+    drawCircle(colors.strong, w * .09f, Offset(w * .76f, h * .66f))
+    drawLine(colors.line, Offset(w * .76f, h * .57f), Offset(w * .74f, h * .49f), w * .025f, StrokeCap.Round)
+    drawOval(colors.accent, Offset(w * .74f, h * .48f), Size(w * .13f, h * .07f))
 }
 
 private fun DrawScope.drawStool(colors: IllustrationColors) {

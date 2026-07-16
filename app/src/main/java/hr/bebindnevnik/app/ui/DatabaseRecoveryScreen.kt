@@ -103,7 +103,13 @@ internal fun DatabaseRecoveryScreen(
         AlertDialog(
             onDismissRequest = { preview = null },
             title = { Text("Kontrolirano vratiti podatke?") },
-            text = { Text("Izvorna baza prvo će se kopirati u privatnu recovery mapu. Tek zatim će se stvoriti nova baza i u jednoj transakciji vratiti ${valid.mealCount} obroka, ${valid.dailyCount} dnevnih evidencija i ${valid.tummyCount} tummy-time sesija.") },
+            text = {
+                Text(
+                    "Izvorna baza prvo će se kopirati u privatnu recovery mapu. Tek zatim će se stvoriti nova baza i u jednoj " +
+                        "transakciji vratiti ${valid.mealCount} mliječnih obroka, ${valid.complementaryFoodCount} obroka dohrane, " +
+                        "${valid.dailyCount} dnevnih evidencija, ${valid.tummyCount} tummy-time sesija i ${valid.growthCount} mjerenja rasta.",
+                )
+            },
             confirmButton = {
                 Button(onClick = {
                     scope.launch {

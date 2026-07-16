@@ -41,9 +41,11 @@ object UpdateChecker {
         withContext(Dispatchers.IO) {
             runCatching {
                 val release = parseRelease(get(RELEASE_API_URL))
-                val manifest = parseVersionManifest(get(VERSION_URL))
-                require(manifest.first == release.versionName) { "Objavljena verzija i manifest nisu usklađeni." }
-                release.copy(versionCode = manifest.second)
+                val manifest = runCatching { parseVersionManifest(get(VERSION_URL)) }.getOrNull()
+                val versionCode =
+                    manifest?.takeIf { it.first == release.versionName }?.second
+                        ?: semanticVersionCode(release.versionName)
+                release.copy(versionCode = versionCode)
             }.fold(
                 onSuccess = { update ->
                     if (update.versionCode > currentVersionCode) UpdateCheckResult.Available(update) else UpdateCheckResult.Current(update.versionName)
@@ -73,8 +75,8 @@ object UpdateChecker {
         return AppUpdate(
             versionCode = 0,
             versionName = versionName,
-            apkUrl = apkUrl!!,
-            checksumUrl = checksumUrl!!,
+            apkUrl = apkUrl,
+            checksumUrl = checksumUrl,
             releaseNotes = data.optString("body").trim(),
             publishedAt = data.optString("published_at").trim(),
         )
@@ -88,6 +90,16 @@ object UpdateChecker {
         return name to code
     }
 
+    internal fun semanticVersionCode(versionName: String): Int {
+        val match =
+            Regex("^(\\d+)\\.(\\d+)\\.(\\d+)$").matchEntire(versionName.trim())
+                ?: throw IllegalArgumentException("Oznaka verzije nije podržana.")
+        val (major, minor, patch) = match.destructured
+        val values = listOf(major, minor, patch).map(String::toInt)
+        require(values[1] < 1_000 && values[2] < 1_000) { "Oznaka verzije nije podržana." }
+        return Math.addExact(Math.addExact(Math.multiplyExact(values[0], 1_000_000), values[1] * 1_000), values[2])
+    }
+
     private fun validateAssetUrl(value: String) {
         val uri = URI(value)
         require(uri.scheme == "https" && uri.host == "github.com") { "Asset nije na pouzdanoj GitHub adresi." }
@@ -96,12 +108,14 @@ object UpdateChecker {
 
     private fun get(url: String): String {
         val connection =
-            (URL(url).openConnection() as HttpURLConnection).apply {
+            (URL(url + (if ('?' in url) "&nocache=" else "?nocache=") + System.currentTimeMillis()).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000
                 readTimeout = 15_000
                 requestMethod = "GET"
                 setRequestProperty("Accept", "application/vnd.github+json")
                 setRequestProperty("User-Agent", "BebinDnevnik/${BuildConfig.VERSION_NAME}")
+                setRequestProperty("Cache-Control", "no-cache, no-store")
+                setRequestProperty("Pragma", "no-cache")
                 useCaches = false
             }
         return try {

@@ -294,6 +294,8 @@ internal fun CloudBackupSettingsCard(viewModel: MainViewModel) {
                                     decoded.metadata.mealCount,
                                     decoded.metadata.dailyCount,
                                     decoded.metadata.tummyCount,
+                                    decoded.metadata.growthCount,
+                                    decoded.metadata.complementaryFoodCount,
                                 )
                         }
                     }
@@ -330,7 +332,10 @@ internal fun CloudBackupSettingsCard(viewModel: MainViewModel) {
                                 }.padding(8.dp),
                         ) {
                             Text(preview.metadata.createdAt, fontWeight = FontWeight.Bold)
-                            Text("Verzija ${preview.metadata.appVersion} · ${preview.metadata.mealCount} obroka · ${preview.metadata.tummyCount} tummy-time sesija")
+                            Text(
+                                "Verzija ${preview.metadata.appVersion} · ${preview.metadata.mealCount} mliječnih obroka · " +
+                                    "${preview.metadata.complementaryFoodCount} obroka dohrane · ${preview.metadata.tummyCount} tummy-time sesija",
+                            )
                         }
                     }
                 }
@@ -344,7 +349,13 @@ internal fun CloudBackupSettingsCard(viewModel: MainViewModel) {
         AlertDialog(
             onDismissRequest = { restorePreview = null },
             title = { Text("Vratiti odabranu kopiju?") },
-            text = { Text("Vratit će se ${preview.mealCount} obroka, ${preview.dailyCount} dnevnih evidencija i ${preview.tummyCount} tummy-time sesija. Postojeći podaci zamijenit će se tek nakon potvrde.") },
+            text = {
+                Text(
+                    "Vratit će se ${preview.mealCount} mliječnih obroka, ${preview.complementaryFoodCount} obroka dohrane, " +
+                        "${preview.dailyCount} dnevnih evidencija, ${preview.tummyCount} tummy-time sesija i " +
+                        "${preview.growthCount} mjerenja rasta. Postojeći podaci zamijenit će se tek nakon potvrde.",
+                )
+            },
             confirmButton = {
                 Button(onClick = {
                     viewModel.replaceAll(preview.snapshot)
