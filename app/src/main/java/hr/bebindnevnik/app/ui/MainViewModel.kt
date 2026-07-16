@@ -12,8 +12,12 @@ import hr.bebindnevnik.app.data.ComplementaryFoodDaySummary
 import hr.bebindnevnik.app.data.ComplementaryFoodMealEntity
 import hr.bebindnevnik.app.data.DailyEntryEntity
 import hr.bebindnevnik.app.data.DaySummary
+import hr.bebindnevnik.app.data.ExpectedMealCountEntity
 import hr.bebindnevnik.app.data.GrowthMeasurementEntity
+import hr.bebindnevnik.app.data.IndividualFeedingTargetEntity
+import hr.bebindnevnik.app.data.IndividualTummyTargetEntity
 import hr.bebindnevnik.app.data.MealEntity
+import hr.bebindnevnik.app.data.MilkCompletenessEntity
 import hr.bebindnevnik.app.data.SettingsEntity
 import hr.bebindnevnik.app.data.TernaryStatus
 import hr.bebindnevnik.app.data.TummyInputMethod
@@ -30,6 +34,8 @@ import hr.bebindnevnik.app.domain.growth.GrowthAssessment
 import hr.bebindnevnik.app.domain.growth.GrowthIndicator
 import hr.bebindnevnik.app.domain.growth.GrowthReferenceLine
 import hr.bebindnevnik.app.domain.growth.GrowthValidation
+import hr.bebindnevnik.app.domain.guidelines.DailyGuidelineResult
+import hr.bebindnevnik.app.domain.guidelines.GuidelineEngine
 import hr.bebindnevnik.app.domain.resolveLocalDayTransition
 import hr.bebindnevnik.app.notifications.TimerCancelReason
 import hr.bebindnevnik.app.notifications.TimerEvent
@@ -63,6 +69,12 @@ data class UiState(
     val childProfile: ChildProfileEntity? = null,
     val growthMeasurements: List<GrowthMeasurementEntity> = emptyList(),
     val complementaryFoodMeals: List<ComplementaryFoodMealEntity> = emptyList(),
+    val milkCompletenessHistory: List<MilkCompletenessEntity> = emptyList(),
+    val expectedMealCountHistory: List<ExpectedMealCountEntity> = emptyList(),
+    val individualFeedingTargets: List<IndividualFeedingTargetEntity> = emptyList(),
+    val individualTummyTargets: List<IndividualTummyTargetEntity> = emptyList(),
+    val guidelineResult: DailyGuidelineResult =
+        GuidelineEngine.calculate(AppSnapshot(emptyList(), emptyList(), emptyList(), SettingsEntity()), LocalDate.now(), LocalDate.now()),
 ) {
     val selectedMeals get() = meals.filter { it.date == selectedDate.toString() }
     val selectedSessions get() = sessions.filter { it.date == selectedDate.toString() }
@@ -141,18 +153,33 @@ class MainViewModel(
                 childProfile = snapshot.childProfile,
                 growthMeasurements = snapshot.growthMeasurements,
                 complementaryFoodMeals = snapshot.complementaryFoodMeals,
+                milkCompletenessHistory = snapshot.milkCompletenessHistory,
+                expectedMealCountHistory = snapshot.expectedMealCountHistory,
+                individualFeedingTargets = snapshot.individualFeedingTargets,
+                individualTummyTargets = snapshot.individualTummyTargets,
+                guidelineResult = GuidelineEngine.calculate(snapshot, values[1] as LocalDate, values[2] as LocalDate),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
     val statisticsReport: StateFlow<StatisticsReport> =
         combine(container.repository.snapshot, mutableStatisticsSelection, currentLocalDate) { snapshot, selection, today ->
-            StatisticsCalculator.calculate(
-                selection = selection,
-                today = today,
-                meals = snapshot.meals,
-                entries = snapshot.dailyEntries,
-                sessions = snapshot.tummySessions,
-                complementaryFoodMeals = snapshot.complementaryFoodMeals,
+            val base =
+                StatisticsCalculator.calculate(
+                    selection = selection,
+                    today = today,
+                    meals = snapshot.meals,
+                    entries = snapshot.dailyEntries,
+                    sessions = snapshot.tummySessions,
+                    complementaryFoodMeals = snapshot.complementaryFoodMeals,
+                )
+            base.copy(
+                guideline =
+                    GuidelineEngine.statistics(
+                        snapshot,
+                        base.start,
+                        base.end,
+                        today,
+                    ),
             )
         }.flowOn(Dispatchers.Default)
             .stateIn(
@@ -397,6 +424,129 @@ class MainViewModel(
     }
 
     fun setTheme(theme: AppTheme) = viewModelScope.launch { container.repository.updateSettings { it.copy(theme = theme) } }
+
+    fun setGuidelineTargets(enabled: Boolean) = viewModelScope.launch { container.repository.updateSettings { it.copy(guidelineTargetsEnabled = enabled) } }
+
+    fun dismissGuidelineWizard() =
+        viewModelScope.launch {
+            container.repository.updateSettings { it.copy(guidelineWizardDismissed = true) }
+        }
+
+    fun completeGuidelineWizard() =
+        viewModelScope.launch {
+            container.repository.updateSettings {
+                it.copy(guidelineWizardCompleted = true, guidelineWizardDismissed = false)
+            }
+        }
+
+    fun restartGuidelineWizard() =
+        viewModelScope.launch {
+            container.repository.updateSettings {
+                it.copy(guidelineWizardCompleted = false, guidelineWizardDismissed = false)
+            }
+        }
+
+    fun setMilkEvidenceComplete(
+        complete: Boolean,
+        startDate: LocalDate = state.value.selectedDate,
+    ): Job =
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val history = state.value.milkCompletenessHistory
+            val sameDay = history.firstOrNull { it.startDate == startDate.toString() }
+            val nextStart =
+                history
+                    .map { LocalDate.parse(it.startDate) }
+                    .filter { it.isAfter(startDate) }
+                    .minOrNull()
+            history
+                .filter {
+                    val start = LocalDate.parse(it.startDate)
+                    val end = it.endDate?.let(LocalDate::parse)
+                    sameDay == null && !start.isAfter(startDate) && (end == null || !end.isBefore(startDate))
+                }.forEach { container.repository.saveMilkCompleteness(it.copy(endDate = startDate.minusDays(1).toString())) }
+            container.repository.saveMilkCompleteness(
+                (sameDay ?: MilkCompletenessEntity(startDate = startDate.toString(), complete = complete, createdAt = now, updatedAt = now))
+                    .copy(complete = complete, endDate = nextStart?.minusDays(1)?.toString()),
+            )
+        }
+
+    fun setExpectedMealCount(
+        count: Int,
+        startDate: LocalDate = state.value.selectedDate,
+    ): Job =
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val history = state.value.expectedMealCountHistory
+            val sameDay = history.firstOrNull { it.startDate == startDate.toString() }
+            val nextStart =
+                history
+                    .map { LocalDate.parse(it.startDate) }
+                    .filter { it.isAfter(startDate) }
+                    .minOrNull()
+            history
+                .filter {
+                    val start = LocalDate.parse(it.startDate)
+                    val end = it.endDate?.let(LocalDate::parse)
+                    sameDay == null && !start.isAfter(startDate) && (end == null || !end.isBefore(startDate))
+                }.forEach { container.repository.saveExpectedMealCount(it.copy(endDate = startDate.minusDays(1).toString())) }
+            container.repository.saveExpectedMealCount(
+                (sameDay ?: ExpectedMealCountEntity(startDate = startDate.toString(), mealCount = count, createdAt = now, updatedAt = now))
+                    .copy(mealCount = count, endDate = nextStart?.minusDays(1)?.toString()),
+            )
+        }
+
+    fun saveIndividualFeedingTarget(target: IndividualFeedingTargetEntity): Job =
+        viewModelScope.launch {
+            val start = LocalDate.parse(target.startDate)
+            val end = target.endDate?.let(LocalDate::parse)
+            val conflict =
+                state.value.individualFeedingTargets.any {
+                    it.id != target.id &&
+                        GuidelineEngine.intervalsOverlap(
+                            start,
+                            end,
+                            LocalDate.parse(it.startDate),
+                            it.endDate?.let(LocalDate::parse),
+                        )
+                }
+            if (conflict) {
+                messages.emit(UiMessage.Text("Individualni ciljevi hranjenja ne smiju se vremenski preklapati."))
+            } else {
+                container.repository.saveIndividualFeedingTarget(target)
+            }
+        }
+
+    fun deleteIndividualFeedingTarget(target: IndividualFeedingTargetEntity): Job = viewModelScope.launch { container.repository.deleteIndividualFeedingTarget(target) }
+
+    fun saveIndividualTummyTarget(target: IndividualTummyTargetEntity): Job =
+        viewModelScope.launch {
+            val start = LocalDate.parse(target.startDate)
+            val end = target.endDate?.let(LocalDate::parse)
+            val conflict =
+                state.value.individualTummyTargets.any {
+                    it.id != target.id &&
+                        GuidelineEngine.intervalsOverlap(
+                            start,
+                            end,
+                            LocalDate.parse(it.startDate),
+                            it.endDate?.let(LocalDate::parse),
+                        )
+                }
+            if (conflict) {
+                messages.emit(UiMessage.Text("Individualni tummy-time ciljevi ne smiju se vremenski preklapati."))
+            } else {
+                container.repository.saveIndividualTummyTarget(target)
+            }
+        }
+
+    fun deleteIndividualTummyTarget(target: IndividualTummyTargetEntity): Job = viewModelScope.launch { container.repository.deleteIndividualTummyTarget(target) }
+
+    fun setIndependentMobilityDate(date: LocalDate?): Job =
+        viewModelScope.launch {
+            val profile = state.value.childProfile ?: return@launch
+            container.repository.saveChildProfile(profile.copy(independentMobilityDate = date?.toString()))
+        }
 
     fun saveChildProfile(profile: ChildProfileEntity): Job =
         viewModelScope.launch {

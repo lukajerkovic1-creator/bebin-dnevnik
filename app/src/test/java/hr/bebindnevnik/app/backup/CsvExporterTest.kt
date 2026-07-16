@@ -28,7 +28,7 @@ class CsvExporterTest {
         assertEquals("\"a\nb\"", CsvExporter.escape("a\nb"))
     }
 
-    @Test fun `ZIP contains six BOM prefixed Croatian CSV files including growth and complementary food data`() {
+    @Test fun `ZIP contains eight BOM prefixed Croatian CSV files including guideline source settings`() {
         val now = 1_700_000_000_000
         val snapshot =
             AppSnapshot(
@@ -49,7 +49,16 @@ class CsvExporterTest {
             }
         }
         assertEquals(
-            setOf("obroci.csv", "tummy_time.csv", "dnevna_evidencija.csv", "profil_djeteta.csv", "mjerenja_rasta.csv", "dohrana.csv"),
+            setOf(
+                "obroci.csv",
+                "tummy_time.csv",
+                "dnevna_evidencija.csv",
+                "profil_djeteta.csv",
+                "mjerenja_rasta.csv",
+                "dohrana.csv",
+                "individualni_ciljevi.csv",
+                "postavke_okvirnih_ciljeva.csv",
+            ),
             entries.keys,
         )
         entries.values.forEach { assertArrayEquals(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()), it.copyOfRange(0, 3)) }
@@ -63,6 +72,8 @@ class CsvExporterTest {
         val foodCsv = String(entries.getValue("dohrana.csv"), Charsets.UTF_8)
         assertTrue(foodCsv.contains("Datum;Vrijeme;Namirnice;Količina;Jedinica"))
         assertTrue(foodCsv.contains("\"mrkva | krumpir; batat\";45;g"))
+        assertTrue(String(entries.getValue("individualni_ciljevi.csv"), Charsets.UTF_8).contains("Vrsta;Donja granica / minute"))
+        assertTrue(String(entries.getValue("postavke_okvirnih_ciljeva.csv"), Charsets.UTF_8).contains("Prikaz okvirnih ciljeva;DA"))
     }
 
     @Test fun `empty database still exports headers`() {

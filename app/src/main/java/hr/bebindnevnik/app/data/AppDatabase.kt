@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONArray
 
-const val DATABASE_VERSION = 5
+const val DATABASE_VERSION = 6
 
 class EnumConverters {
     @TypeConverter fun ternaryToString(value: TernaryStatus): String = value.name
@@ -53,6 +53,10 @@ class EnumConverters {
         ChildProfileEntity::class,
         GrowthMeasurementEntity::class,
         ComplementaryFoodMealEntity::class,
+        MilkCompletenessEntity::class,
+        ExpectedMealCountEntity::class,
+        IndividualFeedingTargetEntity::class,
+        IndividualTummyTargetEntity::class,
     ],
     version = DATABASE_VERSION,
     exportSchema = true,
@@ -137,6 +141,81 @@ abstract class AppDatabase : RoomDatabase() {
                     db.execSQL(
                         "CREATE INDEX IF NOT EXISTS index_complementary_food_meals_date_time " +
                             "ON complementary_food_meals(date, time)",
+                    )
+                }
+            }
+
+        val MIGRATION_5_6 =
+            object : Migration(5, 6) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE settings ADD COLUMN guidelineTargetsEnabled INTEGER NOT NULL DEFAULT 1")
+                    db.execSQL("ALTER TABLE settings ADD COLUMN guidelineWizardCompleted INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE settings ADD COLUMN guidelineWizardDismissed INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE child_profile ADD COLUMN independentMobilityDate TEXT")
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS milk_completeness_history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            startDate TEXT NOT NULL,
+                            endDate TEXT,
+                            complete INTEGER NOT NULL,
+                            createdAt INTEGER NOT NULL,
+                            updatedAt INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_milk_completeness_start_date " +
+                            "ON milk_completeness_history(startDate)",
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS expected_meal_count_history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            startDate TEXT NOT NULL,
+                            endDate TEXT,
+                            mealCount INTEGER NOT NULL,
+                            createdAt INTEGER NOT NULL,
+                            updatedAt INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_expected_meal_count_start_date " +
+                            "ON expected_meal_count_history(startDate)",
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS individual_feeding_targets (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            lowerMlPerDay INTEGER NOT NULL,
+                            upperMlPerDay INTEGER NOT NULL,
+                            startDate TEXT NOT NULL,
+                            endDate TEXT,
+                            createdAt INTEGER NOT NULL,
+                            updatedAt INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_feeding_target_start_date " +
+                            "ON individual_feeding_targets(startDate)",
+                    )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS individual_tummy_targets (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            minutesPerDay INTEGER NOT NULL,
+                            startDate TEXT NOT NULL,
+                            endDate TEXT,
+                            createdAt INTEGER NOT NULL,
+                            updatedAt INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_tummy_target_start_date " +
+                            "ON individual_tummy_targets(startDate)",
                     )
                 }
             }

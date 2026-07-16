@@ -36,6 +36,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -323,6 +324,16 @@ private fun FeedingSummaryCard(report: StatisticsReport) =
             "Dan s najvećim unosom",
             feeding.highestDay?.let { "${it.hrDate()} · ${feeding.highestDayMl} ml" } ?: "Nije evidentirano",
         )
+        if (report.guideline.enabled) {
+            HorizontalDivider()
+            val target = report.guideline.feeding
+            SummaryLine("Prosječni evidentirani dnevni unos", "${target.averageRecordedMl} ml")
+            SummaryLine("Dani unutar raspona", target.withinDays.toString())
+            SummaryLine("Dani ispod / iznad raspona", "${target.belowDays} / ${target.aboveDays}")
+            SummaryLine("Dani s nepotpunom evidencijom", target.incompleteDays.toString())
+            SummaryLine("Dani bez izračuna", target.withoutCalculationDays.toString())
+            SummaryLine("Prosječno prema donjoj granici", target.averagePercentOfLower?.let { "$it %" } ?: "Nema izračuna")
+        }
     }
 
 @Composable
@@ -358,6 +369,14 @@ private fun TummySummaryCard(report: StatisticsReport) =
                 .statisticsDuration(),
         )
         SummaryLine("Najdulja sesija", tummy.longestSessionSeconds?.statisticsDuration() ?: "Nije evidentirano")
+        if (report.guideline.enabled) {
+            HorizontalDivider()
+            val target = report.guideline.tummy
+            SummaryLine("Prosječno evidentirano", "${target.averageRecordedMinutes} min/dan")
+            SummaryLine("Cilj ostvaren / nije ostvaren", "${target.achievedDays} / ${target.notAchievedDays}")
+            SummaryLine("Dani bez cilja ili evidencije", target.withoutGoalOrEvidenceDays.toString())
+            SummaryLine("Prosječno ostvarenje", target.averagePercent?.let { "$it %" } ?: "Nema izračuna")
+        }
     }
 
 @Composable

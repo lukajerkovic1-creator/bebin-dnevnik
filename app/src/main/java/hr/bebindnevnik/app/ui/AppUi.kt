@@ -160,11 +160,28 @@ fun BebinDnevnikApp(
     val snackbar = remember { SnackbarHostState() }
     var undoMessage by remember { mutableStateOf<UiMessage?>(null) }
     var notificationExplanation by rememberSaveable { mutableStateOf(false) }
+    var guidelineWizardOpen by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     LaunchedEffect(backStack?.destination?.route) {
         viewModel.onMainScreenChanged(backStack?.destination?.route)
+    }
+
+    LaunchedEffect(
+        state.settings.onboardingShown,
+        state.settings.guidelineTargetsEnabled,
+        state.settings.guidelineWizardCompleted,
+        state.settings.guidelineWizardDismissed,
+    ) {
+        if (
+            state.settings.onboardingShown &&
+            state.settings.guidelineTargetsEnabled &&
+            !state.settings.guidelineWizardCompleted &&
+            !state.settings.guidelineWizardDismissed
+        ) {
+            guidelineWizardOpen = true
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -263,7 +280,15 @@ fun BebinDnevnikApp(
     ) { padding ->
         NavHost(navController, "today", Modifier.padding(padding)) {
             composable("today") {
-                TodayScreen(state, timer, highlight, viewModel, notifications) { navController.navigate("settings") }
+                TodayScreen(
+                    state,
+                    timer,
+                    highlight,
+                    viewModel,
+                    notifications,
+                    { navController.navigate("settings") },
+                    { guidelineWizardOpen = true },
+                )
             }
             composable("calendar") {
                 CalendarScreen(state, viewModel) { date ->
@@ -286,9 +311,18 @@ fun BebinDnevnikApp(
                 GrowthScreen(state = state, viewModel = viewModel)
             }
             composable("settings") {
-                SettingsScreen(state, viewModel, notifications, onExplainPermission = { notificationExplanation = true })
+                SettingsScreen(
+                    state,
+                    viewModel,
+                    notifications,
+                    onExplainPermission = { notificationExplanation = true },
+                    onOpenGuidelineWizard = { guidelineWizardOpen = true },
+                )
             }
         }
+    }
+    if (guidelineWizardOpen) {
+        GuidelineWizard(state, viewModel, onClose = { guidelineWizardOpen = false })
     }
 }
 
@@ -380,6 +414,7 @@ private fun TodayScreen(
     viewModel: MainViewModel,
     notifications: NotificationHelper,
     openSettings: () -> Unit,
+    openGuidelineWizard: () -> Unit,
 ) {
     var mealDialog by remember { mutableStateOf<MealEntity?>(null) }
     var newMeal by remember { mutableStateOf(false) }
@@ -493,6 +528,13 @@ private fun TodayScreen(
                 state.selectedMeals.sortedByDescending { it.time }.forEach { meal ->
                     EntryRow("${meal.time.hrStoredTime()} · ${meal.amountMl} ml", { mealDialog = meal }, { deleteMeal = meal }, canEdit)
                 }
+                if (state.settings.guidelineTargetsEnabled) {
+                    FeedingGuidelineSummary(
+                        result = state.guidelineResult.feeding,
+                        onCompleteData = openGuidelineWizard,
+                        onSetMealCount = { viewModel.setExpectedMealCount(it, state.selectedDate) },
+                    )
+                }
             }
         }
         item {
@@ -539,6 +581,9 @@ private fun TodayScreen(
                     "${if (isToday) "Ukupno danas" else "Ukupno za odabrani dan"}: " +
                         "${state.summary.tummySeconds.durationText()} · ${tummySessionCountText(state.summary.tummyCount)}",
                 )
+                if (state.settings.guidelineTargetsEnabled) {
+                    TummyGuidelineSummary(state.guidelineResult.tummy, openGuidelineWizard)
+                }
                 if (isToday) {
                     when (timer.phase) {
                         TimerPhase.RUNNING -> {
@@ -1317,6 +1362,7 @@ private fun SettingsScreen(
     viewModel: MainViewModel,
     notifications: NotificationHelper,
     onExplainPermission: () -> Unit,
+    onOpenGuidelineWizard: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1399,6 +1445,25 @@ private fun SettingsScreen(
                         )
                     }
                 }
+            }
+        }
+        item {
+            SettingsCard("Okvirni ciljevi") {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Prikazuj okvirne ciljeve", Modifier.weight(1f))
+                    Switch(state.settings.guidelineTargetsEnabled, viewModel::setGuidelineTargets)
+                }
+                Text(
+                    "Informativni sažeci samo za mliječno hranjenje i tummy time. Ne utječu na potpunost dana niti stvaraju alarme.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedButton(
+                    onClick = {
+                        viewModel.restartGuidelineWizard()
+                        onOpenGuidelineWizard()
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("start-guideline-wizard"),
+                ) { Text("Pokreni vodič") }
             }
         }
         item { AppUpdateSettingsCard(context, viewModel) }

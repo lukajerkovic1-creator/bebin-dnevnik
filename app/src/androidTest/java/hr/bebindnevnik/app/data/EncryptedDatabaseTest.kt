@@ -38,6 +38,7 @@ class EncryptedDatabaseTest {
                     AppDatabase.MIGRATION_2_3,
                     AppDatabase.MIGRATION_3_4,
                     AppDatabase.MIGRATION_4_5,
+                    AppDatabase.MIGRATION_5_6,
                 ).build()
     }
 
@@ -482,4 +483,80 @@ class EncryptedDatabaseTest {
             assertEquals(listOf(first.id), repository.currentSnapshot().complementaryFoodMeals.map { it.id })
             assertTrue(repository.currentSnapshot().growthMeasurements.isEmpty())
         }
+
+    @Test fun migrationFromVersionFiveAddsGuidelineSourcesWithoutLosingProfileOrSettings() {
+        val name = "migration-5-6.db"
+        context.deleteDatabase(name)
+        val v5 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(5) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                                db.execSQL("CREATE TABLE settings (id INTEGER NOT NULL PRIMARY KEY, reminderEnabled INTEGER NOT NULL, reminderTime TEXT NOT NULL, theme TEXT NOT NULL, onboardingShown INTEGER NOT NULL, lastNotificationDate TEXT)")
+                                db.execSQL("INSERT INTO settings VALUES (1, 1, '18:00', 'TAMNA', 1, NULL)")
+                                db.execSQL(
+                                    "CREATE TABLE child_profile (id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL, " +
+                                        "sex TEXT NOT NULL, birthDate TEXT NOT NULL, gestationalWeeks INTEGER NOT NULL, " +
+                                        "gestationalDays INTEGER NOT NULL, birthWeightG INTEGER, birthLengthCm REAL, " +
+                                        "birthHeadCircumferenceCm REAL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)",
+                                )
+                                db.execSQL("INSERT INTO child_profile VALUES (1, 'Ana', 'DJEVOJCICA', '2026-01-01', 40, 0, 3200, NULL, NULL, 100, 200)")
+                            }
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) = Unit
+                        },
+                    ).build(),
+            )
+        v5.writableDatabase
+        v5.close()
+        val v6 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(6) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) = Unit
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) = AppDatabase.MIGRATION_5_6.migrate(db)
+                        },
+                    ).build(),
+            )
+        v6.writableDatabase.query("SELECT theme, guidelineTargetsEnabled, guidelineWizardCompleted FROM settings").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("TAMNA", cursor.getString(0))
+            assertEquals(1, cursor.getInt(1))
+            assertEquals(0, cursor.getInt(2))
+        }
+        v6.writableDatabase.query("SELECT name, birthWeightG, independentMobilityDate FROM child_profile").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Ana", cursor.getString(0))
+            assertEquals(3200, cursor.getInt(1))
+            assertTrue(cursor.isNull(2))
+        }
+        listOf(
+            "milk_completeness_history",
+            "expected_meal_count_history",
+            "individual_feeding_targets",
+            "individual_tummy_targets",
+        ).forEach { table ->
+            v6.writableDatabase.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+        }
+        v6.close()
+        context.deleteDatabase(name)
+    }
 }

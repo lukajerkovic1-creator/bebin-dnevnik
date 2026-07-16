@@ -1,6 +1,6 @@
 {
-  "versionCode": 1005000,
-  "versionName": "1.5.0",
+  "versionCode": 1006000,
+  "versionName": "1.6.0",
   "downloadUrl": "https://lukajerkovic1-creator.github.io/bebin-dnevnik/download/",
-  "releaseNotes": "Profil i praćenje rasta djeteta, WHO krivulje rasta te nova odvojena evidencija dohrane s namirnicama, gramima i mililitrima."
+  "releaseNotes": "Novi medicinski oprezni okvirni ciljevi mliječnog hranjenja i tummy timea, individualni ciljevi, vodič te povijesno točni izračuni dobi i težine."
 }

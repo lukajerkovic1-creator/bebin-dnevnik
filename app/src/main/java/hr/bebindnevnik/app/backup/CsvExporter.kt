@@ -108,6 +108,34 @@ object CsvExporter {
                             )
                         },
                 )
+                zip.addCsv(
+                    "individualni_ciljevi.csv",
+                    listOf(
+                        listOf<Any>("Vrsta", "Donja granica / minute", "Gornja granica", "Datum početka", "Datum završetka"),
+                    ) +
+                        snapshot.individualFeedingTargets.map {
+                            listOf<Any>("Hranjenje (ml/dan)", it.lowerMlPerDay, it.upperMlPerDay, date(it.startDate), it.endDate?.let(::date) ?: "")
+                        } +
+                        snapshot.individualTummyTargets.map {
+                            listOf<Any>("Tummy time (min/dan)", it.minutesPerDay, "", date(it.startDate), it.endDate?.let(::date) ?: "")
+                        },
+                )
+                zip.addCsv(
+                    "postavke_okvirnih_ciljeva.csv",
+                    listOf(listOf<Any>("Vrsta", "Vrijednost", "Datum početka", "Datum završetka")) +
+                        listOf(
+                            listOf<Any>("Prikaz okvirnih ciljeva", if (snapshot.settings.guidelineTargetsEnabled) "DA" else "NE", "", ""),
+                            listOf<Any>("Vodič dovršen", if (snapshot.settings.guidelineWizardCompleted) "DA" else "NE", "", ""),
+                            listOf<Any>("Vodič odbijen", if (snapshot.settings.guidelineWizardDismissed) "DA" else "NE", "", ""),
+                            listOf<Any>("Samostalna pokretljivost", snapshot.childProfile?.independentMobilityDate?.let(::date) ?: "", "", ""),
+                        ) +
+                        snapshot.milkCompletenessHistory.map {
+                            listOf<Any>("Potpuna evidencija mlijeka", if (it.complete) "DA" else "NE", date(it.startDate), it.endDate?.let(::date) ?: "")
+                        } +
+                        snapshot.expectedMealCountHistory.map {
+                            listOf<Any>("Očekivani broj obroka", it.mealCount, date(it.startDate), it.endDate?.let(::date) ?: "")
+                        },
+                )
             }
             output.toByteArray()
         }

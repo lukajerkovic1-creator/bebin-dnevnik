@@ -15,8 +15,9 @@ Local-first, nativna Android aplikacija za evidenciju mliječnih obroka, dohrane
 - objedinjeni, odgodivi dnevni podsjetnik putem WorkManagera
 - šifrirana, verzionirana sigurnosna kopija i transakcijski uvoz sa zamjenom podataka
 - sigurni GitHub updater koji prije instalacije provjerava SHA-256, package name, versionCode i produkcijski certifikat
+- lokalni, verzionirani i medicinski oprezni okvirni ciljevi mliječnog hranjenja i tummy timea ([izvori i formule](docs/GUIDELINE_TARGETS.md))
 - dobrovoljni, klijentski šifrirani Google Drive `appDataFolder` backup s pet verzija
-- ZIP izvoz šest UTF-8 BOM CSV datoteka za pregled
+- ZIP izvoz osam UTF-8 BOM CSV datoteka za pregled
 - svijetla, tamna i sistemska tema, pristupačne oznake i dodirne površine
 - automatski CI, API 29 emulator, potpisani GitHub Release i GitHub Pages
 

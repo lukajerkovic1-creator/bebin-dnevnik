@@ -6,6 +6,7 @@ import hr.bebindnevnik.app.data.ComplementaryFoodMealEntity
 import hr.bebindnevnik.app.data.ComplementaryFoodUnit
 import hr.bebindnevnik.app.data.DailyEntryEntity
 import hr.bebindnevnik.app.data.MealEntity
+import hr.bebindnevnik.app.data.MilkCompletenessEntity
 import hr.bebindnevnik.app.data.SettingsEntity
 import hr.bebindnevnik.app.data.TernaryStatus
 import hr.bebindnevnik.app.data.TummyInputMethod
@@ -55,11 +56,19 @@ class CloudBackupCodecTest {
             listOf(MealEntity(1, "2026-01-02", "08:00", 80, now, now)),
             listOf(DailyEntryEntity("2026-01-02", TernaryStatus.DA, TernaryStatus.NE, false, now, now, 2)),
             listOf(TummySessionEntity(1, "2026-01-02", "09:00", 90, TummyInputMethod.RUCNO, now, now)),
-            SettingsEntity(reminderEnabled = false, reminderTime = "19:00", onboardingShown = true),
+            SettingsEntity(
+                reminderEnabled = false,
+                reminderTime = "19:00",
+                onboardingShown = true,
+                guidelineTargetsEnabled = false,
+                guidelineWizardCompleted = true,
+            ),
             complementaryFoodMeals =
                 listOf(
                     ComplementaryFoodMealEntity(1, "2026-01-02", "12:00", listOf("mrkva"), 20, ComplementaryFoodUnit.G, now, now),
                 ),
+            milkCompletenessHistory =
+                listOf(MilkCompletenessEntity(1, "2026-01-01", complete = false, createdAt = now, updatedAt = now)),
         )
     }
 }

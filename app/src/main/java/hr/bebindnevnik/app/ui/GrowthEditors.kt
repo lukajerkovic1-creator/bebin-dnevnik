@@ -90,6 +90,7 @@ internal fun GrowthProfileEditor(
             birthWeightG = birthWeight.toIntOrNull(),
             birthLengthCm = birthLength.toDecimalOrNull(),
             birthHeadCircumferenceCm = birthHead.toDecimalOrNull(),
+            independentMobilityDate = existing?.independentMobilityDate,
             createdAt = existing?.createdAt ?: now,
             updatedAt = existing?.updatedAt ?: now,
         )

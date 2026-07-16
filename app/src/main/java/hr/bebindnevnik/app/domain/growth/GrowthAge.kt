@@ -7,7 +7,6 @@ import java.time.temporal.ChronoUnit
 
 private const val TERM_DAYS = 40 * 7
 private const val PRETERM_WEEKS = 37
-private const val CORRECTION_LIMIT_DAYS = 730L
 private const val FENTON_END_DAYS = 50 * 7L
 
 fun calculateGrowthAges(
@@ -21,7 +20,12 @@ fun calculateGrowthAges(
     val correction = (TERM_DAYS - gestationalDays).coerceAtLeast(0)
     return GrowthAges(
         chronologicalDays = chronological,
-        correctedDays = if (profile.gestationalWeeks < PRETERM_WEEKS && chronological < CORRECTION_LIMIT_DAYS) chronological - correction else null,
+        correctedDays =
+            if (profile.gestationalWeeks < PRETERM_WEEKS && date.isBefore(birthDate.plusYears(2))) {
+                chronological - correction
+            } else {
+                null
+            },
         postmenstrualDays = gestationalDays + chronological,
         correctionDays = correction,
     )

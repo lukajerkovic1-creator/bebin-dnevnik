@@ -7,6 +7,7 @@ import hr.bebindnevnik.app.data.DaySummary
 import hr.bebindnevnik.app.data.MealEntity
 import hr.bebindnevnik.app.data.TernaryStatus
 import hr.bebindnevnik.app.data.TummySessionEntity
+import hr.bebindnevnik.app.domain.guidelines.GuidelinePeriodStatistics
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.math.roundToInt
@@ -101,6 +102,7 @@ data class StatisticsReport(
     val completeness: CompletenessStatistics,
     val complementaryFood: ComplementaryFoodStatistics,
     val comparison: TrendComparison,
+    val guideline: GuidelinePeriodStatistics = GuidelinePeriodStatistics.EMPTY,
 ) {
     val dayCount: Int get() = days.size
 }
