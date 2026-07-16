@@ -66,7 +66,7 @@ class ComplementaryFoodUiTest {
         rule.onNodeWithTag("ingredient-input").performTextInput("krumpir")
         rule.onNodeWithTag("add-ingredient").performClick()
         rule.onNodeWithTag("complementary-food-amount").performTextInput("45")
-        rule.onNodeWithTag("food-unit-ml").performClick()
+        rule.onNodeWithTag("food-unit-ml").performScrollTo().performClick()
         rule
             .onNodeWithTag("save-complementary-food")
             .performScrollTo()
