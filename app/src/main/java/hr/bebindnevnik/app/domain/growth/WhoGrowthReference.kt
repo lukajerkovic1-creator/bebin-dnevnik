@@ -157,10 +157,10 @@ object WhoReferenceFiles {
     const val INCLUDED_ON = "2026-07-16"
     val sha256 =
         mapOf(
-            "head_circumference_for_age.tsv" to "e794e46f06b91223ad2c6435148dc08794a1d75b67613a652c3151201a98bf7c",
-            "length_height_for_age.tsv" to "709f7a11881451daf7820f022d363d5bdb93746b5361d6bd9218af6ff838e0c2",
-            "weight_for_age.tsv" to "bc15a6a623dd1d5beaeed1497666332aa54bc4ccd15ff9658c487d79694ab77b",
-            "weight_for_height.tsv" to "0050d31041c2f7d4f8a34f27e8066fd73a24806835b9e4a0de1a7ee46d54d582",
-            "weight_for_length.tsv" to "ad470cf41b147bd2a16026e57fd17968df7bf746b9f0bf2ff85df95239643778",
+            "head_circumference_for_age.tsv" to "e6f9fc5ac0079ad8acc9de59b65bc7990ff945ec07ab5ab6613e8194582499f9",
+            "length_height_for_age.tsv" to "8ff0d70c7000697f4fe4138dfb81e2818655f9d2bd4fbcdeb37e2bf0ca56cb52",
+            "weight_for_age.tsv" to "6c139f44d50b23c0290f7f21878ae561d6ee3eecf978a3b6549029f9cba9a318",
+            "weight_for_height.tsv" to "743311d0ab73d90245ca437c7d98d3fac26cf681e61e8e96d0b645226182428c",
+            "weight_for_length.tsv" to "c171d462cc3b48acb6c0fb9ed115b3ada69931ccc457af01a12009bf055cc0b1",
         )
 }

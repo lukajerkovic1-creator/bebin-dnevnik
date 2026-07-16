@@ -88,7 +88,11 @@ class WhoGrowthReferenceTest {
 
     @Test fun `embedded WHO file hashes are pinned`() {
         WhoReferenceFiles.sha256.forEach { (name, expected) ->
-            val bytes = File("src/main/assets/growth/who/$name").readBytes()
+            val bytes =
+                File("src/main/assets/growth/who/$name")
+                    .readText(Charsets.UTF_8)
+                    .replace("\r\n", "\n")
+                    .toByteArray(Charsets.UTF_8)
             val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
             assertEquals(expected, actual)
         }
