@@ -185,6 +185,8 @@ internal fun GrowthScreen(
                 GrowthSection.PROFILE -> {
                     GrowthProfile(
                         profile = profile,
+                        state = state,
+                        viewModel = viewModel,
                         onEdit = { showProfileWarning = true },
                         onDelete = { firstDeleteProfileWarning = true },
                         onSources = { showSources = true },
@@ -576,6 +578,8 @@ private fun GrowthHistoryMetric(
 @Composable
 private fun GrowthProfile(
     profile: ChildProfileEntity,
+    state: UiState,
+    viewModel: MainViewModel,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSources: () -> Unit,
@@ -600,6 +604,7 @@ private fun GrowthProfile(
         ProfileValue("Porođajni opseg glave", profile.birthHeadCircumferenceCm?.let { "${"%.1f".format(Locale.forLanguageTag("hr-HR"), it)} cm" } ?: "Nije uneseno")
         Text("Spol se koristi samo za odabir odgovarajućih WHO/Fenton referentnih podataka.", style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = onSources) { Text("Izvori podataka o rastu") }
+        GuidelineProfileSettings(state, viewModel)
         HorizontalDivider()
         OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.Delete, null)

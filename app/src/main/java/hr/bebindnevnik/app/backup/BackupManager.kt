@@ -8,9 +8,13 @@ import hr.bebindnevnik.app.data.ChildSex
 import hr.bebindnevnik.app.data.ComplementaryFoodMealEntity
 import hr.bebindnevnik.app.data.ComplementaryFoodUnit
 import hr.bebindnevnik.app.data.DailyEntryEntity
+import hr.bebindnevnik.app.data.ExpectedMealCountEntity
 import hr.bebindnevnik.app.data.GrowthMeasurementEntity
+import hr.bebindnevnik.app.data.IndividualFeedingTargetEntity
+import hr.bebindnevnik.app.data.IndividualTummyTargetEntity
 import hr.bebindnevnik.app.data.LengthMeasurementType
 import hr.bebindnevnik.app.data.MealEntity
+import hr.bebindnevnik.app.data.MilkCompletenessEntity
 import hr.bebindnevnik.app.data.SettingsEntity
 import hr.bebindnevnik.app.data.TernaryStatus
 import hr.bebindnevnik.app.data.TummyInputMethod
@@ -47,7 +51,7 @@ class InvalidBackupException(
 @Suppress("TooManyFunctions")
 object BackupManager {
     private val magic = byteArrayOf(0x42, 0x44, 0x4B, 0x31)
-    private const val FORMAT_VERSION = 4
+    private const val FORMAT_VERSION = 5
     private const val ITERATIONS = 310_000
     private const val SALT_BYTES = 16
     private const val NONCE_BYTES = 12
@@ -196,6 +200,12 @@ object BackupManager {
             if (formatVersion >= 4) {
                 put("complementaryFoodMeals", JSONArray().apply { complementaryFoodMeals.forEach { put(it.toJson()) } })
             }
+            if (formatVersion >= 5) {
+                put("milkCompletenessHistory", JSONArray().apply { milkCompletenessHistory.forEach { put(it.toJson()) } })
+                put("expectedMealCountHistory", JSONArray().apply { expectedMealCountHistory.forEach { put(it.toJson()) } })
+                put("individualFeedingTargets", JSONArray().apply { individualFeedingTargets.forEach { put(it.toJson()) } })
+                put("individualTummyTargets", JSONArray().apply { individualTummyTargets.forEach { put(it.toJson()) } })
+            }
         }
 
     private fun MealEntity.toJson() =
@@ -236,6 +246,9 @@ object BackupManager {
             put("reminderTime", reminderTime)
             put("theme", theme.name)
             put("onboardingShown", onboardingShown)
+            put("guidelineTargetsEnabled", guidelineTargetsEnabled)
+            put("guidelineWizardCompleted", guidelineWizardCompleted)
+            put("guidelineWizardDismissed", guidelineWizardDismissed)
         }
 
     private fun ChildProfileEntity.toJson() =
@@ -248,6 +261,7 @@ object BackupManager {
             put("birthWeightG", birthWeightG ?: JSONObject.NULL)
             put("birthLengthCm", birthLengthCm ?: JSONObject.NULL)
             put("birthHeadCircumferenceCm", birthHeadCircumferenceCm ?: JSONObject.NULL)
+            put("independentMobilityDate", independentMobilityDate ?: JSONObject.NULL)
             put("createdAt", createdAt)
             put("updatedAt", updatedAt)
         }
@@ -277,6 +291,48 @@ object BackupManager {
             put("updatedAt", updatedAt)
         }
 
+    private fun MilkCompletenessEntity.toJson() =
+        JSONObject().apply {
+            put("id", id)
+            put("startDate", startDate)
+            put("endDate", endDate ?: JSONObject.NULL)
+            put("complete", complete)
+            put("createdAt", createdAt)
+            put("updatedAt", updatedAt)
+        }
+
+    private fun ExpectedMealCountEntity.toJson() =
+        JSONObject().apply {
+            put("id", id)
+            put("startDate", startDate)
+            put("endDate", endDate ?: JSONObject.NULL)
+            put("mealCount", mealCount)
+            put("createdAt", createdAt)
+            put("updatedAt", updatedAt)
+        }
+
+    private fun IndividualFeedingTargetEntity.toJson() =
+        JSONObject().apply {
+            put("id", id)
+            put("lowerMlPerDay", lowerMlPerDay)
+            put("upperMlPerDay", upperMlPerDay)
+            put("startDate", startDate)
+            put("endDate", endDate ?: JSONObject.NULL)
+            put("createdAt", createdAt)
+            put("updatedAt", updatedAt)
+        }
+
+    private fun IndividualTummyTargetEntity.toJson() =
+        JSONObject().apply {
+            put("id", id)
+            put("minutesPerDay", minutesPerDay)
+            put("startDate", startDate)
+            put("endDate", endDate ?: JSONObject.NULL)
+            put("createdAt", createdAt)
+            put("updatedAt", updatedAt)
+        }
+
+    @Suppress("LongMethod") // Version-gated decoding is intentionally kept atomic and auditable.
     private fun JSONObject.toSnapshot(headerVersion: Int): AppSnapshot {
         val contentVersion = getInt("formatVersion")
         if (contentVersion != headerVersion || contentVersion !in 1..FORMAT_VERSION) {
@@ -324,6 +380,9 @@ object BackupManager {
                 reminderTime = config.getString("reminderTime"),
                 theme = AppTheme.valueOf(config.getString("theme")),
                 onboardingShown = config.getBoolean("onboardingShown"),
+                guidelineTargetsEnabled = if (contentVersion >= 5) config.optBoolean("guidelineTargetsEnabled", true) else true,
+                guidelineWizardCompleted = if (contentVersion >= 5) config.optBoolean("guidelineWizardCompleted", false) else false,
+                guidelineWizardDismissed = if (contentVersion >= 5) config.optBoolean("guidelineWizardDismissed", false) else false,
             )
         val profile =
             if (contentVersion >= 3 && !isNull("childProfile")) {
@@ -337,6 +396,7 @@ object BackupManager {
                         birthWeightG = item.optNullableInt("birthWeightG"),
                         birthLengthCm = item.optNullableDouble("birthLengthCm"),
                         birthHeadCircumferenceCm = item.optNullableDouble("birthHeadCircumferenceCm"),
+                        independentMobilityDate = if (contentVersion >= 5 && !item.isNull("independentMobilityDate")) item.getString("independentMobilityDate") else null,
                         createdAt = item.getLong("createdAt"),
                         updatedAt = item.getLong("updatedAt"),
                     )
@@ -379,12 +439,87 @@ object BackupManager {
             } else {
                 emptyList()
             }
-        return AppSnapshot(meals, entries, sessions, settings, profile, growth, complementaryFood)
+        val completeness =
+            if (contentVersion >= 5) {
+                getJSONArray("milkCompletenessHistory").mapObjects { item ->
+                    MilkCompletenessEntity(
+                        id = item.getLong("id"),
+                        startDate = item.getString("startDate"),
+                        endDate = item.optNullableString("endDate"),
+                        complete = item.getBoolean("complete"),
+                        createdAt = item.getLong("createdAt"),
+                        updatedAt = item.getLong("updatedAt"),
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        val mealCounts =
+            if (contentVersion >= 5) {
+                getJSONArray("expectedMealCountHistory").mapObjects { item ->
+                    ExpectedMealCountEntity(
+                        id = item.getLong("id"),
+                        startDate = item.getString("startDate"),
+                        endDate = item.optNullableString("endDate"),
+                        mealCount = item.getInt("mealCount"),
+                        createdAt = item.getLong("createdAt"),
+                        updatedAt = item.getLong("updatedAt"),
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        val feedingTargets =
+            if (contentVersion >= 5) {
+                getJSONArray("individualFeedingTargets").mapObjects { item ->
+                    IndividualFeedingTargetEntity(
+                        id = item.getLong("id"),
+                        lowerMlPerDay = item.getInt("lowerMlPerDay"),
+                        upperMlPerDay = item.getInt("upperMlPerDay"),
+                        startDate = item.getString("startDate"),
+                        endDate = item.optNullableString("endDate"),
+                        createdAt = item.getLong("createdAt"),
+                        updatedAt = item.getLong("updatedAt"),
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        val tummyTargets =
+            if (contentVersion >= 5) {
+                getJSONArray("individualTummyTargets").mapObjects { item ->
+                    IndividualTummyTargetEntity(
+                        id = item.getLong("id"),
+                        minutesPerDay = item.getInt("minutesPerDay"),
+                        startDate = item.getString("startDate"),
+                        endDate = item.optNullableString("endDate"),
+                        createdAt = item.getLong("createdAt"),
+                        updatedAt = item.getLong("updatedAt"),
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        return AppSnapshot(
+            meals,
+            entries,
+            sessions,
+            settings,
+            profile,
+            growth,
+            complementaryFood,
+            completeness,
+            mealCounts,
+            feedingTargets,
+            tummyTargets,
+        )
     }
 
     private fun JSONObject.optNullableInt(name: String): Int? = if (isNull(name)) null else getInt(name)
 
     private fun JSONObject.optNullableDouble(name: String): Double? = if (isNull(name)) null else getDouble(name)
+
+    private fun JSONObject.optNullableString(name: String): String? = if (isNull(name)) null else getString(name)
 
     private fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> = List(length()) { transform(getJSONObject(it)) }
 

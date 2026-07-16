@@ -32,6 +32,18 @@ interface AppDao {
     @Query("SELECT * FROM complementary_food_meals ORDER BY date DESC, time DESC, id DESC")
     fun observeComplementaryFoodMeals(): Flow<List<ComplementaryFoodMealEntity>>
 
+    @Query("SELECT * FROM milk_completeness_history ORDER BY startDate DESC, id DESC")
+    fun observeMilkCompletenessHistory(): Flow<List<MilkCompletenessEntity>>
+
+    @Query("SELECT * FROM expected_meal_count_history ORDER BY startDate DESC, id DESC")
+    fun observeExpectedMealCountHistory(): Flow<List<ExpectedMealCountEntity>>
+
+    @Query("SELECT * FROM individual_feeding_targets ORDER BY startDate DESC, id DESC")
+    fun observeIndividualFeedingTargets(): Flow<List<IndividualFeedingTargetEntity>>
+
+    @Query("SELECT * FROM individual_tummy_targets ORDER BY startDate DESC, id DESC")
+    fun observeIndividualTummyTargets(): Flow<List<IndividualTummyTargetEntity>>
+
     @Query("SELECT * FROM meals")
     suspend fun allMeals(): List<MealEntity>
 
@@ -52,6 +64,18 @@ interface AppDao {
 
     @Query("SELECT * FROM complementary_food_meals ORDER BY date DESC, time DESC, id DESC")
     suspend fun allComplementaryFoodMeals(): List<ComplementaryFoodMealEntity>
+
+    @Query("SELECT * FROM milk_completeness_history ORDER BY startDate DESC, id DESC")
+    suspend fun allMilkCompletenessHistory(): List<MilkCompletenessEntity>
+
+    @Query("SELECT * FROM expected_meal_count_history ORDER BY startDate DESC, id DESC")
+    suspend fun allExpectedMealCountHistory(): List<ExpectedMealCountEntity>
+
+    @Query("SELECT * FROM individual_feeding_targets ORDER BY startDate DESC, id DESC")
+    suspend fun allIndividualFeedingTargets(): List<IndividualFeedingTargetEntity>
+
+    @Query("SELECT * FROM individual_tummy_targets ORDER BY startDate DESC, id DESC")
+    suspend fun allIndividualTummyTargets(): List<IndividualTummyTargetEntity>
 
     @Query("SELECT * FROM daily_entries WHERE date = :date")
     suspend fun dailyEntry(date: String): DailyEntryEntity?
@@ -102,6 +126,22 @@ interface AppDao {
     suspend fun deleteComplementaryFoodMeal(meal: ComplementaryFoodMealEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putMilkCompleteness(item: MilkCompletenessEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putExpectedMealCount(item: ExpectedMealCountEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putIndividualFeedingTarget(item: IndividualFeedingTargetEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putIndividualTummyTarget(item: IndividualTummyTargetEntity): Long
+
+    @Delete suspend fun deleteIndividualFeedingTarget(item: IndividualFeedingTargetEntity)
+
+    @Delete suspend fun deleteIndividualTummyTarget(item: IndividualTummyTargetEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMeals(meals: List<MealEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -115,6 +155,18 @@ interface AppDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertComplementaryFoodMeals(meals: List<ComplementaryFoodMealEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMilkCompletenessHistory(items: List<MilkCompletenessEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertExpectedMealCountHistory(items: List<ExpectedMealCountEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertIndividualFeedingTargets(items: List<IndividualFeedingTargetEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertIndividualTummyTargets(items: List<IndividualTummyTargetEntity>)
 
     @Query("DELETE FROM meals")
     suspend fun deleteAllMeals()
@@ -136,4 +188,16 @@ interface AppDao {
 
     @Query("DELETE FROM complementary_food_meals")
     suspend fun deleteAllComplementaryFoodMeals()
+
+    @Query("DELETE FROM milk_completeness_history")
+    suspend fun deleteAllMilkCompletenessHistory()
+
+    @Query("DELETE FROM expected_meal_count_history")
+    suspend fun deleteAllExpectedMealCountHistory()
+
+    @Query("DELETE FROM individual_feeding_targets")
+    suspend fun deleteAllIndividualFeedingTargets()
+
+    @Query("DELETE FROM individual_tummy_targets")
+    suspend fun deleteAllIndividualTummyTargets()
 }

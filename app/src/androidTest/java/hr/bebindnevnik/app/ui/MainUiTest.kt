@@ -52,6 +52,9 @@ class MainUiTest {
         if (rule.onAllNodesWithText("Ne sada").fetchSemanticsNodes().isNotEmpty()) {
             rule.onNodeWithText("Ne sada").performClick()
         }
+        if (rule.onAllNodesWithText("Postavite okvirne ciljeve").fetchSemanticsNodes().isNotEmpty()) {
+            rule.onNodeWithText("Odustani").performClick()
+        }
     }
 
     @Test fun bottomNavigationOpensAllFourScreensAndPortraitIsLocked() {
@@ -70,6 +73,21 @@ class MainUiTest {
         rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("add-meal"))
         rule.onNodeWithTag("add-meal").assertIsDisplayed()
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, rule.activity.requestedOrientation)
+    }
+
+    @Test fun guidelineSettingsSwitchAndRestartableWizardRemainNonBlocking() {
+        finishOnboardingIfNeeded()
+        rule.onNodeWithTag("navigation-settings").performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasTestTag("start-guideline-wizard"))
+        rule.onNodeWithTag("start-guideline-wizard").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Postavite okvirne ciljeve").assertIsDisplayed()
+        rule.onNodeWithText("Korak 1 od 4").assertIsDisplayed()
+        rule.onNodeWithText("Preskoči").performClick()
+        rule.onNodeWithText("Korak 2 od 4").assertIsDisplayed()
+        rule.onNodeWithText("Natrag").performClick()
+        rule.onNodeWithText("Korak 1 od 4").assertIsDisplayed()
+        rule.onNodeWithText("Odustani").performClick()
+        rule.onNodeWithTag("start-guideline-wizard").assertIsDisplayed()
     }
 
     @Test fun mealQuickButtonsManualInputAndValidationDialogAreReachable() {

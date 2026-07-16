@@ -27,8 +27,8 @@ android {
         applicationId = "hr.bebindnevnik.app"
         minSdk = 29
         targetSdk = 37
-        versionCode = automatedVersionCode ?: 1_005_000
-        versionName = automatedVersionName ?: "1.5.0"
+        versionCode = automatedVersionCode ?: 1_006_000
+        versionName = automatedVersionName ?: "1.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId.replace("\"", "\\\"")}\"")

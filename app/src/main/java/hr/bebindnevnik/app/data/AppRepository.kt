@@ -8,6 +8,14 @@ import kotlinx.coroutines.flow.filterNotNull
 import java.time.LocalDate
 import java.time.LocalTime
 
+private data class GuidelineSourceSnapshot(
+    val completeness: List<MilkCompletenessEntity>,
+    val mealCounts: List<ExpectedMealCountEntity>,
+    val feedingTargets: List<IndividualFeedingTargetEntity>,
+    val tummyTargets: List<IndividualTummyTargetEntity>,
+)
+
+@Suppress("TooManyFunctions") // Repository owns the small CRUD surface for every local diary category.
 class AppRepository(
     private val database: AppDatabase,
     private val onDataChanged: () -> Unit = {},
@@ -20,10 +28,30 @@ class AppRepository(
     val childProfile: Flow<ChildProfileEntity?> = dao.observeChildProfile()
     val growthMeasurements: Flow<List<GrowthMeasurementEntity>> = dao.observeGrowthMeasurements()
     val complementaryFoodMeals: Flow<List<ComplementaryFoodMealEntity>> = dao.observeComplementaryFoodMeals()
+    val milkCompletenessHistory: Flow<List<MilkCompletenessEntity>> = dao.observeMilkCompletenessHistory()
+    val expectedMealCountHistory: Flow<List<ExpectedMealCountEntity>> = dao.observeExpectedMealCountHistory()
+    val individualFeedingTargets: Flow<List<IndividualFeedingTargetEntity>> = dao.observeIndividualFeedingTargets()
+    val individualTummyTargets: Flow<List<IndividualTummyTargetEntity>> = dao.observeIndividualTummyTargets()
     private val diarySnapshot: Flow<AppSnapshot> = combine(meals, dailyEntries, tummySessions, settings, ::AppSnapshot)
+    private val guidelineSnapshot =
+        combine(
+            milkCompletenessHistory,
+            expectedMealCountHistory,
+            individualFeedingTargets,
+            individualTummyTargets,
+            ::GuidelineSourceSnapshot,
+        )
     val snapshot: Flow<AppSnapshot> =
-        combine(diarySnapshot, childProfile, growthMeasurements, complementaryFoodMeals) { diary, profile, growth, food ->
-            diary.copy(childProfile = profile, growthMeasurements = growth, complementaryFoodMeals = food)
+        combine(diarySnapshot, childProfile, growthMeasurements, complementaryFoodMeals, guidelineSnapshot) { diary, profile, growth, food, goals ->
+            diary.copy(
+                childProfile = profile,
+                growthMeasurements = growth,
+                complementaryFoodMeals = food,
+                milkCompletenessHistory = goals.completeness,
+                expectedMealCountHistory = goals.mealCounts,
+                individualFeedingTargets = goals.feedingTargets,
+                individualTummyTargets = goals.tummyTargets,
+            )
         }
 
     suspend fun initialize() {
@@ -214,6 +242,39 @@ class AppRepository(
         onDataChanged()
     }
 
+    suspend fun saveMilkCompleteness(item: MilkCompletenessEntity) {
+        dao.putMilkCompleteness(item.copy(updatedAt = System.currentTimeMillis()))
+        onDataChanged()
+    }
+
+    suspend fun saveExpectedMealCount(item: ExpectedMealCountEntity) {
+        require(item.mealCount in 1..24) { "Očekivani broj obroka mora biti od 1 do 24." }
+        dao.putExpectedMealCount(item.copy(updatedAt = System.currentTimeMillis()))
+        onDataChanged()
+    }
+
+    suspend fun saveIndividualFeedingTarget(item: IndividualFeedingTargetEntity) {
+        require(item.lowerMlPerDay > 0 && item.upperMlPerDay >= item.lowerMlPerDay) { "Raspon cilja hranjenja nije valjan." }
+        dao.putIndividualFeedingTarget(item.copy(updatedAt = System.currentTimeMillis()))
+        onDataChanged()
+    }
+
+    suspend fun deleteIndividualFeedingTarget(item: IndividualFeedingTargetEntity) {
+        dao.deleteIndividualFeedingTarget(item)
+        onDataChanged()
+    }
+
+    suspend fun saveIndividualTummyTarget(item: IndividualTummyTargetEntity) {
+        require(item.minutesPerDay in 1..240) { "Cilj tummy timea mora biti od 1 do 240 minuta." }
+        dao.putIndividualTummyTarget(item.copy(updatedAt = System.currentTimeMillis()))
+        onDataChanged()
+    }
+
+    suspend fun deleteIndividualTummyTarget(item: IndividualTummyTargetEntity) {
+        dao.deleteIndividualTummyTarget(item)
+        onDataChanged()
+    }
+
     suspend fun deleteGrowthProfileAndMeasurements() =
         database
             .withTransaction {
@@ -230,6 +291,10 @@ class AppRepository(
             dao.childProfile(),
             dao.allGrowthMeasurements(),
             dao.allComplementaryFoodMeals(),
+            dao.allMilkCompletenessHistory(),
+            dao.allExpectedMealCountHistory(),
+            dao.allIndividualFeedingTargets(),
+            dao.allIndividualTummyTargets(),
         )
 
     suspend fun summary(date: LocalDate): DaySummary {
@@ -251,6 +316,10 @@ class AppRepository(
                 dao.deleteAllSettings()
                 dao.deleteAllGrowthMeasurements()
                 dao.deleteAllComplementaryFoodMeals()
+                dao.deleteAllMilkCompletenessHistory()
+                dao.deleteAllExpectedMealCountHistory()
+                dao.deleteAllIndividualFeedingTargets()
+                dao.deleteAllIndividualTummyTargets()
                 dao.deleteChildProfile()
                 dao.insertMeals(snapshot.meals)
                 dao.insertDailyEntries(snapshot.dailyEntries)
@@ -259,6 +328,10 @@ class AppRepository(
                 snapshot.childProfile?.let { dao.putChildProfile(it.copy(id = 1)) }
                 dao.insertGrowthMeasurements(snapshot.growthMeasurements)
                 dao.insertComplementaryFoodMeals(snapshot.complementaryFoodMeals)
+                dao.insertMilkCompletenessHistory(snapshot.milkCompletenessHistory)
+                dao.insertExpectedMealCountHistory(snapshot.expectedMealCountHistory)
+                dao.insertIndividualFeedingTargets(snapshot.individualFeedingTargets)
+                dao.insertIndividualTummyTargets(snapshot.individualTummyTargets)
             }.also { onDataChanged() }
 
     suspend fun deleteAll() =
@@ -270,6 +343,10 @@ class AppRepository(
                 dao.deleteAllSettings()
                 dao.deleteAllGrowthMeasurements()
                 dao.deleteAllComplementaryFoodMeals()
+                dao.deleteAllMilkCompletenessHistory()
+                dao.deleteAllExpectedMealCountHistory()
+                dao.deleteAllIndividualFeedingTargets()
+                dao.deleteAllIndividualTummyTargets()
                 dao.deleteChildProfile()
                 dao.putSettings(SettingsEntity(onboardingShown = true))
             }.also { onDataChanged() }

@@ -58,6 +58,9 @@ data class SettingsEntity(
     val theme: AppTheme = AppTheme.SUSTAV,
     val onboardingShown: Boolean = false,
     val lastNotificationDate: String? = null,
+    val guidelineTargetsEnabled: Boolean = true,
+    val guidelineWizardCompleted: Boolean = false,
+    val guidelineWizardDismissed: Boolean = false,
 )
 
 @Entity(tableName = "child_profile")
@@ -71,6 +74,60 @@ data class ChildProfileEntity(
     val birthWeightG: Int? = null,
     val birthLengthCm: Double? = null,
     val birthHeadCircumferenceCm: Double? = null,
+    val independentMobilityDate: String? = null,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "milk_completeness_history",
+    indices = [Index(value = ["startDate"], name = "index_milk_completeness_start_date")],
+)
+data class MilkCompletenessEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val startDate: String,
+    val endDate: String? = null,
+    val complete: Boolean,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "expected_meal_count_history",
+    indices = [Index(value = ["startDate"], name = "index_expected_meal_count_start_date")],
+)
+data class ExpectedMealCountEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val startDate: String,
+    val endDate: String? = null,
+    val mealCount: Int,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "individual_feeding_targets",
+    indices = [Index(value = ["startDate"], name = "index_feeding_target_start_date")],
+)
+data class IndividualFeedingTargetEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val lowerMlPerDay: Int,
+    val upperMlPerDay: Int,
+    val startDate: String,
+    val endDate: String? = null,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "individual_tummy_targets",
+    indices = [Index(value = ["startDate"], name = "index_tummy_target_start_date")],
+)
+data class IndividualTummyTargetEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val minutesPerDay: Int,
+    val startDate: String,
+    val endDate: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -136,4 +193,8 @@ data class AppSnapshot(
     val childProfile: ChildProfileEntity? = null,
     val growthMeasurements: List<GrowthMeasurementEntity> = emptyList(),
     val complementaryFoodMeals: List<ComplementaryFoodMealEntity> = emptyList(),
+    val milkCompletenessHistory: List<MilkCompletenessEntity> = emptyList(),
+    val expectedMealCountHistory: List<ExpectedMealCountEntity> = emptyList(),
+    val individualFeedingTargets: List<IndividualFeedingTargetEntity> = emptyList(),
+    val individualTummyTargets: List<IndividualTummyTargetEntity> = emptyList(),
 )

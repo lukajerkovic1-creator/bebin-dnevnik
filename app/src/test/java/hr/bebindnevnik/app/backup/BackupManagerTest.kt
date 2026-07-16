@@ -6,8 +6,12 @@ import hr.bebindnevnik.app.data.ChildSex
 import hr.bebindnevnik.app.data.ComplementaryFoodMealEntity
 import hr.bebindnevnik.app.data.ComplementaryFoodUnit
 import hr.bebindnevnik.app.data.DailyEntryEntity
+import hr.bebindnevnik.app.data.ExpectedMealCountEntity
 import hr.bebindnevnik.app.data.GrowthMeasurementEntity
+import hr.bebindnevnik.app.data.IndividualFeedingTargetEntity
+import hr.bebindnevnik.app.data.IndividualTummyTargetEntity
 import hr.bebindnevnik.app.data.MealEntity
+import hr.bebindnevnik.app.data.MilkCompletenessEntity
 import hr.bebindnevnik.app.data.SettingsEntity
 import hr.bebindnevnik.app.data.TernaryStatus
 import hr.bebindnevnik.app.data.TummyInputMethod
@@ -30,6 +34,10 @@ class BackupManagerTest {
         assertEquals(snapshot.childProfile, preview.snapshot.childProfile)
         assertEquals(snapshot.growthMeasurements, preview.snapshot.growthMeasurements)
         assertEquals(snapshot.complementaryFoodMeals, preview.snapshot.complementaryFoodMeals)
+        assertEquals(snapshot.milkCompletenessHistory, preview.snapshot.milkCompletenessHistory)
+        assertEquals(snapshot.expectedMealCountHistory, preview.snapshot.expectedMealCountHistory)
+        assertEquals(snapshot.individualFeedingTargets, preview.snapshot.individualFeedingTargets)
+        assertEquals(snapshot.individualTummyTargets, preview.snapshot.individualTummyTargets)
         assertEquals(1, preview.growthCount)
         assertEquals(1, preview.complementaryFoodCount)
     }
@@ -88,6 +96,10 @@ class BackupManagerTest {
             ChildProfileEntity(name = "Žana", sex = ChildSex.DJEVOJCICA, birthDate = "2026-01-01", gestationalWeeks = 35, gestationalDays = 4, createdAt = now, updatedAt = now),
             listOf(GrowthMeasurementEntity(1, "2026-01-02", "10:00", 2_100, 44.2, headCircumferenceCm = 31.4, createdAt = now, updatedAt = now)),
             listOf(ComplementaryFoodMealEntity(1, "2026-01-02", "11:00", listOf("mrkva", "krumpir"), 45, ComplementaryFoodUnit.G, now, now)),
+            listOf(MilkCompletenessEntity(1, "2026-01-01", complete = true, createdAt = now, updatedAt = now)),
+            listOf(ExpectedMealCountEntity(1, "2026-01-01", mealCount = 6, createdAt = now, updatedAt = now)),
+            listOf(IndividualFeedingTargetEntity(1, 650, 800, "2026-01-01", createdAt = now, updatedAt = now)),
+            listOf(IndividualTummyTargetEntity(1, 30, "2026-01-01", createdAt = now, updatedAt = now)),
         )
     }
 }
