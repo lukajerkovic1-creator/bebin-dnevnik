@@ -79,6 +79,22 @@ class ComplementaryFoodUiTest {
         }
     }
 
+    @Test fun typedIngredientIsSavedWithoutPressingAddIngredient() {
+        var saved: ComplementaryFoodMealEntity? = null
+        editor { saved = it }
+        rule.onNodeWithTag("ingredient-input").performTextInput("  mrkva  ")
+        rule.onNodeWithTag("complementary-food-amount").performTextInput("35")
+        rule
+            .onNodeWithTag("save-complementary-food")
+            .performScrollTo()
+            .assertIsEnabled()
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(listOf("mrkva"), saved?.ingredients)
+            assertEquals(35, saved?.amount)
+        }
+    }
+
     @Test fun dateTimePickersAndUnusualValueConfirmationAreReachable() {
         editor {}
         rule.onNodeWithTag("date-row").performClick()

@@ -27,8 +27,8 @@ android {
         applicationId = "hr.bebindnevnik.app"
         minSdk = 29
         targetSdk = 37
-        versionCode = automatedVersionCode ?: 1_006_000
-        versionName = automatedVersionName ?: "1.6.0"
+        versionCode = automatedVersionCode ?: 1_006_001
+        versionName = automatedVersionName ?: "1.6.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId.replace("\"", "\\\"")}\"")
@@ -128,7 +128,7 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     testImplementation("androidx.room:room-testing:2.8.4")
     testImplementation("org.robolectric:robolectric:4.16.1")
-    testImplementation("org.json:json:20260522")
+    testImplementation("org.json:json:20260719")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test:rules:1.7.0")

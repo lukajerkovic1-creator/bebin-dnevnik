@@ -1,6 +1,6 @@
 {
-  "versionCode": 1006000,
-  "versionName": "1.6.0",
+  "versionCode": 1006001,
+  "versionName": "1.6.1",
   "downloadUrl": "https://lukajerkovic1-creator.github.io/bebin-dnevnik/download/",
-  "releaseNotes": "Novi medicinski oprezni okvirni ciljevi mliječnog hranjenja i tummy timea, individualni ciljevi, vodič te povijesno točni izračuni dobi i težine."
+  "releaseNotes": "Ispravljen ručni unos namirnice u obroku dohrane: uneseni tekst sada se sprema bez dodatnog pritiska na gumb plus."
 }
