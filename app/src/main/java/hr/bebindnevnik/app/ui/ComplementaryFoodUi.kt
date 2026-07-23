@@ -168,9 +168,12 @@ internal fun ComplementaryFoodEditorSheet(
         ingredientInput = ""
     }
 
+    fun ingredientsIncludingInput(): List<String> = ComplementaryFoodLogic.normalizeIngredients(ingredients + ingredientInput)
+
     fun trySave(confirmWarnings: Boolean = false) {
         val amount = amountText.toIntOrNull()
-        val validation = validate(ingredients, amount, date, time, item?.id ?: 0)
+        val effectiveIngredients = ingredientsIncludingInput()
+        val validation = validate(effectiveIngredients, amount, date, time, item?.id ?: 0)
         if (!validation.valid) return
         if (!confirmWarnings && validation.warnings.isNotEmpty()) {
             warningConfirmation = validation.warnings
@@ -181,7 +184,7 @@ internal fun ComplementaryFoodEditorSheet(
                 id = item?.id ?: 0,
                 date = date.toString(),
                 time = time.withSecond(0).withNano(0).toString(),
-                ingredients = ComplementaryFoodLogic.normalizeIngredients(ingredients),
+                ingredients = effectiveIngredients,
                 amount = amount ?: return,
                 unit = unit,
                 createdAt = item?.createdAt ?: 0,
@@ -192,7 +195,7 @@ internal fun ComplementaryFoodEditorSheet(
     }
 
     val amount = amountText.toIntOrNull()
-    val validation = validate(ingredients, amount, date, time, item?.id ?: 0)
+    val validation = validate(ingredientsIncludingInput(), amount, date, time, item?.id ?: 0)
     ModalBottomSheet(onDismissRequest = onClose, sheetState = sheet, modifier = Modifier.testTag("complementary-food-editor")) {
         Column(
             Modifier
