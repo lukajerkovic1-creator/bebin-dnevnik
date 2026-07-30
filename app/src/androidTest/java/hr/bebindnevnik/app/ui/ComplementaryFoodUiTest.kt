@@ -110,6 +110,7 @@ class ComplementaryFoodUiTest {
         rule.onNodeWithTag("food-unit-teaspoon").performScrollTo().performClick()
         rule.onNodeWithText("Količina je izbrisana zbog promjene jedinice.").assertIsDisplayed()
         assertAmountText("")
+        rule.onNodeWithTag("teaspoon-quick-1").performScrollTo()
         (1..5).forEach { rule.onNodeWithTag("teaspoon-quick-$it").assertIsDisplayed() }
         rule.onNodeWithTag("teaspoon-quick-3").performClick()
         rule.onNodeWithTag("save-complementary-food").performScrollTo().performClick()
