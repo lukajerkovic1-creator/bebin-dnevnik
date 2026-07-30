@@ -1,6 +1,7 @@
 package hr.bebindnevnik.app.backup
 
 import hr.bebindnevnik.app.data.AppSnapshot
+import hr.bebindnevnik.app.domain.ComplementaryFoodLogic
 import hr.bebindnevnik.app.domain.growth.GrowthAgeBasis
 import hr.bebindnevnik.app.domain.growth.GrowthCalculator
 import hr.bebindnevnik.app.domain.growth.GrowthIndicator
@@ -100,9 +101,9 @@ object CsvExporter {
                             listOf<Any>(
                                 date(it.date),
                                 time(it.time),
-                                it.ingredients.joinToString(" | "),
+                                ComplementaryFoodLogic.normalizeIngredients(it.ingredients).joinToString(" | "),
                                 it.amount,
-                                it.unit.name.lowercase(),
+                                ComplementaryFoodLogic.unitLabel(it.unit),
                                 timestamp(it.createdAt),
                                 timestamp(it.updatedAt),
                             )

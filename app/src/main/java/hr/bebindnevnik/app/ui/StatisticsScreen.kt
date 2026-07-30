@@ -344,8 +344,20 @@ private fun ComplementaryFoodSummaryCard(report: StatisticsReport) =
         SummaryLine("Dani s barem jednim obrokom", food.recordedDays.toString())
         SummaryLine("Ukupno u gramima", "${food.totalG} g")
         SummaryLine("Ukupno u mililitrima", "${food.totalMl} ml")
+        SummaryLine(
+            "Ukupno u žličicama",
+            hr.bebindnevnik.app.domain.ComplementaryFoodLogic.formatQuantity(
+                food.totalTeaspoons,
+                hr.bebindnevnik.app.data.ComplementaryFoodUnit.TEASPOON,
+            ),
+        )
         SummaryLine("Prosjek obroka u gramima", "${food.averageGPerMeal.hrDecimal()} g")
         SummaryLine("Prosjek obroka u mililitrima", "${food.averageMlPerMeal.hrDecimal()} ml")
+        SummaryLine("Broj obroka u žličicama", food.teaspoonMealCount.toString())
+        SummaryLine(
+            "Prosjek obroka u žličicama",
+            "${food.averageTeaspoonsPerMeal.hrDecimal()} žličica",
+        )
     }
 
 @Composable
@@ -487,8 +499,8 @@ private fun ComplementaryFoodChart(
     var mode by rememberSaveable { mutableIntStateOf(0) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(3) { index ->
-                val labels = listOf("Broj obroka", "Ukupno g", "Ukupno ml")
+            items(4) { index ->
+                val labels = listOf("Broj obroka", "Ukupno g", "Ukupno ml", "Ukupno žličica")
                 FilterChip(mode == index, { mode = index }, { Text(labels[index], maxLines = 1) })
             }
         }
@@ -501,17 +513,22 @@ private fun ComplementaryFoodChart(
                         when (mode) {
                             0 -> day.meals.size.toFloat()
                             1 -> day.totalG.toFloat()
-                            else -> day.totalMl.toFloat()
+                            2 -> day.totalMl.toFloat()
+                            else -> day.totalTeaspoons.toFloat()
                         }
                     }
                 val mealDetails =
                     day.meals.joinToString("; ") {
-                        "${it.time.hrStoredTime()} ${it.ingredients.joinToString(" + ")} ${it.amount} ${it.unit.name.lowercase()}"
+                        "${it.time.hrStoredTime()} ${it.ingredients.joinToString(" + ")} " +
+                            hr.bebindnevnik.app.domain.ComplementaryFoodLogic
+                                .formatQuantity(it.amount, it.unit)
                     }
                 StatisticsChartPoint(
                     day.date,
                     value,
-                    "${day.date.hrDate()} · ${day.meals.size} obroka · ${day.totalG} g · ${day.totalMl} ml · $mealDetails",
+                    "${day.date.hrDate()} · ${day.meals.size} obroka · ${day.totalG} g · ${day.totalMl} ml · " +
+                        "${hr.bebindnevnik.app.domain.ComplementaryFoodLogic.formatQuantity(day.totalTeaspoons, hr.bebindnevnik.app.data.ComplementaryFoodUnit.TEASPOON)} · " +
+                        mealDetails,
                 )
             }
         InteractiveBarChart(

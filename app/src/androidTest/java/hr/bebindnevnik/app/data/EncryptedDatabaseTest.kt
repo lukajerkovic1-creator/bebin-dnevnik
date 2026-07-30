@@ -39,6 +39,7 @@ class EncryptedDatabaseTest {
                     AppDatabase.MIGRATION_3_4,
                     AppDatabase.MIGRATION_4_5,
                     AppDatabase.MIGRATION_5_6,
+                    AppDatabase.MIGRATION_6_7,
                 ).build()
     }
 
@@ -450,9 +451,9 @@ class EncryptedDatabaseTest {
                     ComplementaryFoodMealEntity(
                         date = "2026-07-16",
                         time = "09:30",
-                        ingredients = listOf("mrkva"),
-                        amount = 20,
-                        unit = ComplementaryFoodUnit.G,
+                        ingredients = listOf("i mrkva", "mrkva"),
+                        amount = 3,
+                        unit = ComplementaryFoodUnit.TEASPOON,
                         createdAt = now,
                         updatedAt = now,
                     ),
@@ -470,9 +471,11 @@ class EncryptedDatabaseTest {
                     ),
                 )
             assertEquals(2, repository.currentSnapshot().complementaryFoodMeals.size)
-            repository.updateComplementaryFoodMeal(first.copy(amount = 25))
+            assertEquals(listOf("Mrkva"), first.ingredients)
+            assertEquals(ComplementaryFoodUnit.TEASPOON, first.unit)
+            repository.updateComplementaryFoodMeal(first.copy(amount = 12))
             assertEquals(
-                25,
+                12,
                 repository
                     .currentSnapshot()
                     .complementaryFoodMeals
@@ -557,6 +560,86 @@ class EncryptedDatabaseTest {
             }
         }
         v6.close()
+        context.deleteDatabase(name)
+    }
+
+    @Test fun migrationFromVersionSixNormalizesComplementaryFoodIngredientsIdempotently() {
+        val name = "migration-6-7.db"
+        context.deleteDatabase(name)
+        val v6 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(6) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                                db.execSQL(
+                                    """
+                                    CREATE TABLE complementary_food_meals (
+                                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                                        date TEXT NOT NULL,
+                                        time TEXT NOT NULL,
+                                        ingredients TEXT NOT NULL,
+                                        amount INTEGER NOT NULL,
+                                        unit TEXT NOT NULL,
+                                        createdAt INTEGER NOT NULL,
+                                        updatedAt INTEGER NOT NULL
+                                    )
+                                    """.trimIndent(),
+                                )
+                                db.execSQL(
+                                    "INSERT INTO complementary_food_meals " +
+                                        "(id, date, time, ingredients, amount, unit, createdAt, updatedAt) VALUES " +
+                                        "(1, '2026-07-30', '12:30', '[\"Jabuka\",\"i mrkva\",\"mrkva\"]', 3, 'G', 10, 20)",
+                                )
+                            }
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) = Unit
+                        },
+                    ).build(),
+            )
+        v6.writableDatabase
+        v6.close()
+        val v7 =
+            FrameworkSQLiteOpenHelperFactory().create(
+                SupportSQLiteOpenHelper.Configuration
+                    .builder(context)
+                    .name(name)
+                    .callback(
+                        object : SupportSQLiteOpenHelper.Callback(7) {
+                            override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) = Unit
+
+                            override fun onUpgrade(
+                                db: androidx.sqlite.db.SupportSQLiteDatabase,
+                                oldVersion: Int,
+                                newVersion: Int,
+                            ) = AppDatabase.MIGRATION_6_7.migrate(db)
+                        },
+                    ).build(),
+            )
+
+        fun assertNormalized() {
+            v7.writableDatabase
+                .query(
+                    "SELECT ingredients, date, time, amount, unit FROM complementary_food_meals WHERE id = 1",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("[\"Jabuka\",\"Mrkva\"]", cursor.getString(0))
+                    assertEquals("2026-07-30", cursor.getString(1))
+                    assertEquals("12:30", cursor.getString(2))
+                    assertEquals(3, cursor.getInt(3))
+                    assertEquals("G", cursor.getString(4))
+                }
+        }
+        assertNormalized()
+        AppDatabase.MIGRATION_6_7.migrate(v7.writableDatabase)
+        assertNormalized()
+        v7.close()
         context.deleteDatabase(name)
     }
 }

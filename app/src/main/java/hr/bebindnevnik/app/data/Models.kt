@@ -16,7 +16,7 @@ enum class ChildSex { DJEVOJCICA, DJECAK }
 
 enum class LengthMeasurementType { LEZECA_DULJINA, STOJECA_VISINA }
 
-enum class ComplementaryFoodUnit { G, ML }
+enum class ComplementaryFoodUnit { G, ML, TEASPOON }
 
 @Entity(tableName = "meals")
 data class MealEntity(
@@ -167,6 +167,7 @@ data class ComplementaryFoodDaySummary(
     val mealCount: Int,
     val totalG: Int,
     val totalMl: Int,
+    val totalTeaspoons: Int,
     val lastMeal: ComplementaryFoodMealEntity?,
 )
 

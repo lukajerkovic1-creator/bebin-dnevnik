@@ -6,9 +6,10 @@ import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import hr.bebindnevnik.app.domain.ComplementaryFoodLogic
 import org.json.JSONArray
 
-const val DATABASE_VERSION = 6
+const val DATABASE_VERSION = 7
 
 class EnumConverters {
     @TypeConverter fun ternaryToString(value: TernaryStatus): String = value.name
@@ -217,6 +218,29 @@ abstract class AppDatabase : RoomDatabase() {
                         "CREATE INDEX IF NOT EXISTS index_tummy_target_start_date " +
                             "ON individual_tummy_targets(startDate)",
                     )
+                }
+            }
+
+        val MIGRATION_6_7 =
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    val normalizedRows = mutableListOf<Pair<Long, String>>()
+                    db.query("SELECT id, ingredients FROM complementary_food_meals").use { cursor ->
+                        val idIndex = cursor.getColumnIndexOrThrow("id")
+                        val ingredientsIndex = cursor.getColumnIndexOrThrow("ingredients")
+                        while (cursor.moveToNext()) {
+                            val stored = JSONArray(cursor.getString(ingredientsIndex))
+                            val values = List(stored.length()) { index -> stored.getString(index) }
+                            val normalized = ComplementaryFoodLogic.normalizeIngredients(values)
+                            normalizedRows += cursor.getLong(idIndex) to JSONArray(normalized).toString()
+                        }
+                    }
+                    normalizedRows.forEach { (id, ingredients) ->
+                        db.execSQL(
+                            "UPDATE complementary_food_meals SET ingredients = ? WHERE id = ?",
+                            arrayOf<Any?>(ingredients, id),
+                        )
+                    }
                 }
             }
     }

@@ -46,6 +46,7 @@ class AppContainer(
                         AppDatabase.MIGRATION_3_4,
                         AppDatabase.MIGRATION_4_5,
                         AppDatabase.MIGRATION_5_6,
+                        AppDatabase.MIGRATION_6_7,
                     ).build()
             // Otvori bazu odmah: migracijska pogreška mora završiti u recovery UI-ju,
             // a ne izgledati kao prazna aplikacija dok prvi upit ne uspije.

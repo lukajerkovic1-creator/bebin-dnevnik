@@ -38,7 +38,18 @@ class CsvExporterTest {
                 SettingsEntity(theme = AppTheme.SVIJETLA),
                 ChildProfileEntity(name = "Žana", sex = ChildSex.DJEVOJCICA, birthDate = "2026-01-01", gestationalWeeks = 35, gestationalDays = 4, birthWeightG = 2_000, createdAt = now, updatedAt = now),
                 listOf(GrowthMeasurementEntity(1, "2026-01-02", "10:11:12", 2_100, 44.2, headCircumferenceCm = 31.4, createdAt = now, updatedAt = now)),
-                listOf(ComplementaryFoodMealEntity(1, "2026-01-02", "11:12:13", listOf("mrkva", "krumpir; batat"), 45, ComplementaryFoodUnit.G, now, now)),
+                listOf(
+                    ComplementaryFoodMealEntity(
+                        1,
+                        "2026-01-02",
+                        "11:12:13",
+                        listOf("i mrkva", "krumpir; batat"),
+                        3,
+                        ComplementaryFoodUnit.TEASPOON,
+                        now,
+                        now,
+                    ),
+                ),
             )
         val entries = mutableMapOf<String, ByteArray>()
         ZipInputStream(ByteArrayInputStream(CsvExporter.createZip(snapshot))).use { zip ->
@@ -71,7 +82,7 @@ class CsvExporterTest {
         assertTrue(String(entries.getValue("mjerenja_rasta.csv"), Charsets.UTF_8).contains("2100"))
         val foodCsv = String(entries.getValue("dohrana.csv"), Charsets.UTF_8)
         assertTrue(foodCsv.contains("Datum;Vrijeme;Namirnice;Količina;Jedinica"))
-        assertTrue(foodCsv.contains("\"mrkva | krumpir; batat\";45;g"))
+        assertTrue(foodCsv.contains("\"Mrkva | Krumpir; batat\";3;žličica"))
         assertTrue(String(entries.getValue("individualni_ciljevi.csv"), Charsets.UTF_8).contains("Vrsta;Donja granica / minute"))
         assertTrue(String(entries.getValue("postavke_okvirnih_ciljeva.csv"), Charsets.UTF_8).contains("Prikaz okvirnih ciljeva;DA"))
     }

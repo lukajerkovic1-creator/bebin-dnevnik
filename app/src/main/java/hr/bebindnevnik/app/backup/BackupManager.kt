@@ -19,6 +19,7 @@ import hr.bebindnevnik.app.data.SettingsEntity
 import hr.bebindnevnik.app.data.TernaryStatus
 import hr.bebindnevnik.app.data.TummyInputMethod
 import hr.bebindnevnik.app.data.TummySessionEntity
+import hr.bebindnevnik.app.domain.ComplementaryFoodLogic
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
@@ -51,7 +52,7 @@ class InvalidBackupException(
 @Suppress("TooManyFunctions")
 object BackupManager {
     private val magic = byteArrayOf(0x42, 0x44, 0x4B, 0x31)
-    private const val FORMAT_VERSION = 5
+    private const val FORMAT_VERSION = 6
     private const val ITERATIONS = 310_000
     private const val SALT_BYTES = 16
     private const val NONCE_BYTES = 12
@@ -198,7 +199,10 @@ object BackupManager {
                 put("growthMeasurements", JSONArray().apply { growthMeasurements.forEach { put(it.toJson()) } })
             }
             if (formatVersion >= 4) {
-                put("complementaryFoodMeals", JSONArray().apply { complementaryFoodMeals.forEach { put(it.toJson()) } })
+                put(
+                    "complementaryFoodMeals",
+                    JSONArray().apply { complementaryFoodMeals.forEach { put(it.toJson(formatVersion)) } },
+                )
             }
             if (formatVersion >= 5) {
                 put("milkCompletenessHistory", JSONArray().apply { milkCompletenessHistory.forEach { put(it.toJson()) } })
@@ -279,12 +283,21 @@ object BackupManager {
             put("updatedAt", updatedAt)
         }
 
-    private fun ComplementaryFoodMealEntity.toJson() =
+    private fun ComplementaryFoodMealEntity.toJson(formatVersion: Int) =
         JSONObject().apply {
             put("id", id)
             put("date", date)
             put("time", time)
-            put("ingredients", JSONArray(ingredients))
+            put(
+                "ingredients",
+                JSONArray(
+                    if (formatVersion >= 6) {
+                        ComplementaryFoodLogic.normalizeIngredients(ingredients)
+                    } else {
+                        ingredients
+                    },
+                ),
+            )
             put("amount", amount)
             put("unit", unit.name)
             put("createdAt", createdAt)
@@ -429,7 +442,10 @@ object BackupManager {
                         id = item.getLong("id"),
                         date = item.getString("date"),
                         time = item.getString("time"),
-                        ingredients = item.getJSONArray("ingredients").mapStrings(),
+                        ingredients =
+                            ComplementaryFoodLogic.normalizeIngredients(
+                                item.getJSONArray("ingredients").mapStrings(),
+                            ),
                         amount = item.getInt("amount"),
                         unit = ComplementaryFoodUnit.valueOf(item.getString("unit")),
                         createdAt = item.getLong("createdAt"),
