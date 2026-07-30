@@ -86,6 +86,35 @@ class BackupManagerTest {
         assertTrue(imported.complementaryFoodMeals.isEmpty())
     }
 
+    @Test fun `legacy version five backup normalizes malformed ingredients and duplicates`() {
+        val source =
+            snapshot(1).copy(
+                complementaryFoodMeals =
+                    listOf(
+                        ComplementaryFoodMealEntity(
+                            1,
+                            "2026-01-02",
+                            "11:00",
+                            listOf("Jabuka", "i mrkva", "mrkva"),
+                            45,
+                            ComplementaryFoodUnit.G,
+                            1,
+                            1,
+                        ),
+                    ),
+            )
+        val encrypted =
+            BackupManager.encryptWithVersion(
+                source,
+                "sigurna-šifra".toCharArray(),
+                5,
+            )
+        val imported = BackupManager.decrypt(encrypted, "sigurna-šifra".toCharArray()).snapshot
+        assertEquals(listOf("Jabuka", "Mrkva"), imported.complementaryFoodMeals.single().ingredients)
+        assertEquals(45, imported.complementaryFoodMeals.single().amount)
+        assertEquals(ComplementaryFoodUnit.G, imported.complementaryFoodMeals.single().unit)
+    }
+
     private fun snapshot(count: Int): AppSnapshot {
         val now = 1_700_000_000_000
         return AppSnapshot(
@@ -95,7 +124,18 @@ class BackupManagerTest {
             SettingsEntity(),
             ChildProfileEntity(name = "Žana", sex = ChildSex.DJEVOJCICA, birthDate = "2026-01-01", gestationalWeeks = 35, gestationalDays = 4, createdAt = now, updatedAt = now),
             listOf(GrowthMeasurementEntity(1, "2026-01-02", "10:00", 2_100, 44.2, headCircumferenceCm = 31.4, createdAt = now, updatedAt = now)),
-            listOf(ComplementaryFoodMealEntity(1, "2026-01-02", "11:00", listOf("mrkva", "krumpir"), 45, ComplementaryFoodUnit.G, now, now)),
+            listOf(
+                ComplementaryFoodMealEntity(
+                    1,
+                    "2026-01-02",
+                    "11:00",
+                    listOf("Mrkva", "Krumpir"),
+                    3,
+                    ComplementaryFoodUnit.TEASPOON,
+                    now,
+                    now,
+                ),
+            ),
             listOf(MilkCompletenessEntity(1, "2026-01-01", complete = true, createdAt = now, updatedAt = now)),
             listOf(ExpectedMealCountEntity(1, "2026-01-01", mealCount = 6, createdAt = now, updatedAt = now)),
             listOf(IndividualFeedingTargetEntity(1, 650, 800, "2026-01-01", createdAt = now, updatedAt = now)),

@@ -607,6 +607,7 @@ class MainViewModel(
     fun complementaryFoodValidation(
         ingredients: List<String>,
         amount: Int?,
+        unit: hr.bebindnevnik.app.data.ComplementaryFoodUnit,
         date: LocalDate,
         time: LocalTime,
         editedId: Long = 0,
@@ -614,6 +615,7 @@ class MainViewModel(
         ComplementaryFoodLogic.validate(
             ingredients,
             amount,
+            unit,
             date,
             time,
             currentLocalDate.value,
@@ -630,12 +632,12 @@ class MainViewModel(
         return viewModelScope.launch {
             if (!authorized) return@launch
             val validation =
-                complementaryFoodValidation(meal.ingredients, meal.amount, date, LocalTime.parse(meal.time), meal.id)
+                complementaryFoodValidation(meal.ingredients, meal.amount, meal.unit, date, LocalTime.parse(meal.time), meal.id)
             if (!validation.valid) {
                 messages.emit(UiMessage.Text(validation.error.orEmpty()))
                 return@launch
             }
-            val normalized = meal.copy(ingredients = ComplementaryFoodLogic.normalizeIngredients(meal.ingredients))
+            val normalized = ComplementaryFoodLogic.normalizeMeal(meal)
             if (meal.id == 0L) {
                 container.repository.addComplementaryFoodMeal(normalized)
             } else {

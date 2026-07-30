@@ -101,7 +101,7 @@ class StatisticsScreenUiTest {
         rule.onRoot().captureToImage().also { assertTrue(it.width > 0) }
     }
 
-    @Test fun complementaryFoodStatisticsKeepGramsMillilitersAndIngredientsVisible() {
+    @Test fun complementaryFoodStatisticsKeepAllUnitsAndNormalizedIngredientsVisible() {
         rule.setContent {
             BebinDnevnikTheme(AppTheme.SVIJETLA) {
                 EnhancedStatisticsScreen(report(withData = true), StatisticsSelection(), {}, {})
@@ -111,7 +111,9 @@ class StatisticsScreenUiTest {
         rule.onNodeWithTag("complementary-food-chart").assertIsDisplayed()
         rule.onNodeWithTag("statistics-screen").performScrollToNode(hasText("Različitih namirnica"))
         rule.onNodeWithText("Različitih namirnica").assertIsDisplayed()
-        assertTrue(rule.onAllNodesWithText("mrkva").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(rule.onAllNodesWithText("Mrkva").fetchSemanticsNodes().isNotEmpty())
+        rule.onNodeWithTag("statistics-screen").performScrollToNode(hasText("Ukupno u žličicama"))
+        rule.onNodeWithText("3 žličice").assertIsDisplayed()
     }
 
     private fun report(withData: Boolean = false): hr.bebindnevnik.app.domain.StatisticsReport {
@@ -133,8 +135,9 @@ class StatisticsScreenUiTest {
             )
         val food =
             listOf(
-                ComplementaryFoodMealEntity(1, today.toString(), "11:00", listOf("mrkva"), 20, ComplementaryFoodUnit.G, time, time),
+                ComplementaryFoodMealEntity(1, today.toString(), "11:00", listOf("i mrkva"), 20, ComplementaryFoodUnit.G, time, time),
                 ComplementaryFoodMealEntity(2, today.toString(), "16:00", listOf("jabuka"), 30, ComplementaryFoodUnit.ML, time, time),
+                ComplementaryFoodMealEntity(3, today.toString(), "18:00", listOf("Mrkva"), 3, ComplementaryFoodUnit.TEASPOON, time, time),
             )
         return StatisticsCalculator.calculate(StatisticsSelection(), today, meals, entries, sessions, food)
     }

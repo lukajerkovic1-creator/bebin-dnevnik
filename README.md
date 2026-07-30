@@ -8,7 +8,7 @@ Local-first, nativna Android aplikacija za evidenciju mliječnih obroka, dohrane
 - zasloni Danas, Kalendar, Statistika, Rast i Postavke
 - šifrirana Room baza s SQLCipherom
 - ključ baze generira se sigurnim generatorom, a u privatnoj pohrani ostaje samo AES-GCM omotan ključ; zaštitni ključ živi u Android Keystoreu
-- odvojeni validirani mliječni obroci i obroci dohrane s više namirnica te odvojenim jedinicama g/ml
+- odvojeni validirani mliječni obroci i obroci dohrane s više normaliziranih namirnica te odvojenim jedinicama g/ml/žličica
 - profil djeteta, mjerenja rasta i lokalni WHO referentni izračuni; Fenton rezultati nisu izmišljeni bez licence za podatke
 - trostanja Waya kapi i vježbanja te dnevna potpunost u koju opcionalna dohrana ne ulazi
 - monotona tummy-time štoperica koja se poništava čim aplikacija ode u pozadinu

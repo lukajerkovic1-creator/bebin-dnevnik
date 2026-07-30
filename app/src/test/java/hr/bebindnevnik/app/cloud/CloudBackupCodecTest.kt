@@ -65,7 +65,16 @@ class CloudBackupCodecTest {
             ),
             complementaryFoodMeals =
                 listOf(
-                    ComplementaryFoodMealEntity(1, "2026-01-02", "12:00", listOf("mrkva"), 20, ComplementaryFoodUnit.G, now, now),
+                    ComplementaryFoodMealEntity(
+                        1,
+                        "2026-01-02",
+                        "12:00",
+                        listOf("Mrkva"),
+                        3,
+                        ComplementaryFoodUnit.TEASPOON,
+                        now,
+                        now,
+                    ),
                 ),
             milkCompletenessHistory =
                 listOf(MilkCompletenessEntity(1, "2026-01-01", complete = false, createdAt = now, updatedAt = now)),

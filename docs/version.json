@@ -1,6 +1,6 @@
 {
-  "versionCode": 1006001,
-  "versionName": "1.6.1",
+  "versionCode": 1007000,
+  "versionName": "1.7.0",
   "downloadUrl": "https://lukajerkovic1-creator.github.io/bebin-dnevnik/download/",
-  "releaseNotes": "Ispravljen ručni unos namirnice u obroku dohrane: uneseni tekst sada se sprema bez dodatnog pritiska na gumb plus."
+  "releaseNotes": "Dohrana sada podržava žličice, pravilne hrvatske oblike, odvojenu statistiku i trajnu normalizaciju naziva namirnica."
 }

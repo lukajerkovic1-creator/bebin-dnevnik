@@ -958,6 +958,15 @@ private fun SummaryCard(
         Text("Dohrana: ${complementaryFood.mealCount} obroka")
         if (complementaryFood.totalG > 0) Text("Dohrana ukupno: ${complementaryFood.totalG} g")
         if (complementaryFood.totalMl > 0) Text("Dohrana ukupno: ${complementaryFood.totalMl} ml")
+        if (complementaryFood.totalTeaspoons > 0) {
+            Text(
+                "Dohrana ukupno: " +
+                    hr.bebindnevnik.app.domain.ComplementaryFoodLogic.formatQuantity(
+                        complementaryFood.totalTeaspoons,
+                        hr.bebindnevnik.app.data.ComplementaryFoodUnit.TEASPOON,
+                    ),
+            )
+        }
         Text("Prosječno: ${"%.1f".format(summary.averageMl)} ml")
         Text("Posljednji obrok: ${summary.lastMealTime?.hrStoredTime() ?: "Nije evidentirano"}")
         Text("Waya kapi: ${summary.waya.label()}")

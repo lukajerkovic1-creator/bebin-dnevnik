@@ -2,6 +2,7 @@ package hr.bebindnevnik.app.data
 
 import androidx.room.withTransaction
 import hr.bebindnevnik.app.domain.AppLogic
+import hr.bebindnevnik.app.domain.ComplementaryFoodLogic
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
@@ -223,12 +224,14 @@ class AppRepository(
 
     suspend fun addComplementaryFoodMeal(meal: ComplementaryFoodMealEntity): ComplementaryFoodMealEntity {
         val now = System.currentTimeMillis()
-        val item = meal.copy(id = 0, createdAt = now, updatedAt = now)
+        val item = ComplementaryFoodLogic.normalizeMeal(meal).copy(id = 0, createdAt = now, updatedAt = now)
         return item.copy(id = dao.insertComplementaryFoodMeal(item)).also { onDataChanged() }
     }
 
     suspend fun updateComplementaryFoodMeal(meal: ComplementaryFoodMealEntity) {
-        dao.updateComplementaryFoodMeal(meal.copy(updatedAt = System.currentTimeMillis()))
+        dao.updateComplementaryFoodMeal(
+            ComplementaryFoodLogic.normalizeMeal(meal).copy(updatedAt = System.currentTimeMillis()),
+        )
         onDataChanged()
     }
 
@@ -238,7 +241,7 @@ class AppRepository(
     }
 
     suspend fun restoreComplementaryFoodMeal(meal: ComplementaryFoodMealEntity) {
-        dao.insertComplementaryFoodMeals(listOf(meal))
+        dao.insertComplementaryFoodMeals(listOf(ComplementaryFoodLogic.normalizeMeal(meal)))
         onDataChanged()
     }
 
@@ -305,8 +308,9 @@ class AppRepository(
     suspend fun replaceAll(snapshot: AppSnapshot) =
         database
             .withTransaction {
+                val normalizedFood = snapshot.complementaryFoodMeals.map(ComplementaryFoodLogic::normalizeMeal)
                 require(
-                    snapshot.complementaryFoodMeals.all { meal ->
+                    normalizedFood.all { meal ->
                         meal.amount >= 0 && meal.ingredients.any { it.isNotBlank() }
                     },
                 ) { "Sigurnosna kopija sadrži nevažeći obrok dohrane." }
@@ -327,7 +331,7 @@ class AppRepository(
                 dao.putSettings(snapshot.settings.copy(id = 1, lastNotificationDate = null))
                 snapshot.childProfile?.let { dao.putChildProfile(it.copy(id = 1)) }
                 dao.insertGrowthMeasurements(snapshot.growthMeasurements)
-                dao.insertComplementaryFoodMeals(snapshot.complementaryFoodMeals)
+                dao.insertComplementaryFoodMeals(normalizedFood)
                 dao.insertMilkCompletenessHistory(snapshot.milkCompletenessHistory)
                 dao.insertExpectedMealCountHistory(snapshot.expectedMealCountHistory)
                 dao.insertIndividualFeedingTargets(snapshot.individualFeedingTargets)

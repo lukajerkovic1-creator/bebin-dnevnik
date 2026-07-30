@@ -3,6 +3,7 @@
 package hr.bebindnevnik.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,6 +38,11 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -43,9 +50,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -59,6 +68,7 @@ import hr.bebindnevnik.app.data.ComplementaryFoodUnit
 import hr.bebindnevnik.app.domain.ComplementaryFoodLogic
 import hr.bebindnevnik.app.domain.ComplementaryFoodValidation
 import hr.bebindnevnik.app.domain.ComplementaryFoodWarning
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -84,7 +94,10 @@ internal fun ComplementaryFoodCard(
                         Text("Dohrana još nije evidentirana.")
                     } else {
                         Text("${summary.mealCount} ${foodMealCountLabel(summary.mealCount)}")
-                        Text(foodTotalsText(summary.totalG, summary.totalMl), color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            foodTotalsText(summary.totalG, summary.totalMl, summary.totalTeaspoons),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }
@@ -93,12 +106,12 @@ internal fun ComplementaryFoodCard(
                     Modifier.fillMaxWidth().semantics {
                         contentDescription =
                             "Posljednji obrok dohrane u ${last.time.hrStoredTime()}, " +
-                            "${last.ingredients.joinToString(", ")}, ${last.amount} ${last.unit.label}"
+                            "${last.ingredients.joinToString(", ")}, ${ComplementaryFoodLogic.formatQuantity(last.amount, last.unit)}"
                     },
                 ) {
                     Text("Posljednji obrok", style = MaterialTheme.typography.labelLarge)
                     Text(last.ingredients.joinToString(" · "), fontWeight = FontWeight.SemiBold)
-                    Text("${last.time.hrStoredTime()} · ${last.amount} ${last.unit.label}")
+                    Text("${last.time.hrStoredTime()} · ${ComplementaryFoodLogic.formatQuantity(last.amount, last.unit)}")
                 }
             }
             if (canEdit) {
@@ -119,7 +132,10 @@ internal fun ComplementaryFoodCard(
                     Icon(Icons.Default.Restaurant, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("${meal.time.hrStoredTime()} · ${meal.amount} ${meal.unit.label}", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "${meal.time.hrStoredTime()} · ${ComplementaryFoodLogic.formatQuantity(meal.amount, meal.unit)}",
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         Text(meal.ingredients.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
                     }
                     if (canEdit) {
@@ -143,12 +159,14 @@ internal fun ComplementaryFoodEditorSheet(
     defaultDate: LocalDate,
     today: LocalDate,
     suggestions: List<String>,
-    validate: (List<String>, Int?, LocalDate, LocalTime, Long) -> ComplementaryFoodValidation,
+    validate: (List<String>, Int?, ComplementaryFoodUnit, LocalDate, LocalTime, Long) -> ComplementaryFoodValidation,
     onSave: (ComplementaryFoodMealEntity) -> Unit,
     onClose: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var ingredients by remember(item?.id) { mutableStateOf(item?.ingredients.orEmpty()) }
+    var ingredients by remember(item?.id) {
+        mutableStateOf(ComplementaryFoodLogic.normalizeIngredients(item?.ingredients.orEmpty()))
+    }
     var ingredientInput by remember(item?.id) { mutableStateOf("") }
     var amountText by remember(item?.id) { mutableStateOf(item?.amount?.toString().orEmpty()) }
     var unit by remember(item?.id) { mutableStateOf(item?.unit ?: ComplementaryFoodUnit.G) }
@@ -159,12 +177,11 @@ internal fun ComplementaryFoodEditorSheet(
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var warningConfirmation by remember { mutableStateOf<Set<ComplementaryFoodWarning>>(emptySet()) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     fun addIngredient() {
-        val normalized = ComplementaryFoodLogic.normalizeIngredient(ingredientInput)
-        if (normalized.isNotEmpty() && ingredients.none { it.equals(normalized, ignoreCase = true) }) {
-            ingredients = ingredients + normalized
-        }
+        ingredients = ComplementaryFoodLogic.normalizeIngredients(ingredients + ingredientInput)
         ingredientInput = ""
     }
 
@@ -173,7 +190,7 @@ internal fun ComplementaryFoodEditorSheet(
     fun trySave(confirmWarnings: Boolean = false) {
         val amount = amountText.toIntOrNull()
         val effectiveIngredients = ingredientsIncludingInput()
-        val validation = validate(effectiveIngredients, amount, date, time, item?.id ?: 0)
+        val validation = validate(effectiveIngredients, amount, unit, date, time, item?.id ?: 0)
         if (!validation.valid) return
         if (!confirmWarnings && validation.warnings.isNotEmpty()) {
             warningConfirmation = validation.warnings
@@ -195,7 +212,7 @@ internal fun ComplementaryFoodEditorSheet(
     }
 
     val amount = amountText.toIntOrNull()
-    val validation = validate(ingredientsIncludingInput(), amount, date, time, item?.id ?: 0)
+    val validation = validate(ingredientsIncludingInput(), amount, unit, date, time, item?.id ?: 0)
     ModalBottomSheet(onDismissRequest = onClose, sheetState = sheet, modifier = Modifier.testTag("complementary-food-editor")) {
         Column(
             Modifier
@@ -235,12 +252,52 @@ internal fun ComplementaryFoodEditorSheet(
                     }
                 }
             }
-            val unusedSuggestions = suggestions.filter { suggestion -> ingredients.none { it.equals(suggestion, true) } }
+            val normalizedSuggestions = ComplementaryFoodLogic.normalizeIngredients(suggestions)
+            val unusedSuggestions =
+                normalizedSuggestions.filter { suggestion ->
+                    ingredients.none { it.equals(suggestion, true) }
+                }
             if (unusedSuggestions.isNotEmpty()) {
                 Text("Prethodno korišteno", style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     unusedSuggestions.take(8).forEach { suggestion ->
-                        AssistChip(onClick = { ingredients = ingredients + suggestion }, label = { Text(suggestion) })
+                        AssistChip(
+                            onClick = {
+                                ingredients = ComplementaryFoodLogic.normalizeIngredients(ingredients + suggestion)
+                            },
+                            label = { Text(suggestion) },
+                        )
+                    }
+                }
+            }
+            ComplementaryFoodUnitSelector(
+                selected = unit,
+                onSelected = { selected ->
+                    if (selected != unit) {
+                        unit = selected
+                        amountText = ""
+                        scope.launch {
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar("Količina je izbrisana zbog promjene jedinice.")
+                        }
+                    }
+                },
+            )
+            SnackbarHost(snackbarHostState, Modifier.fillMaxWidth().testTag("complementary-food-snackbar"))
+            if (unit == ComplementaryFoodUnit.TEASPOON) {
+                Text("Brzi odabir", style = MaterialTheme.typography.labelLarge)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    for (value in 1..5) {
+                        FilterChip(
+                            selected = amountText == value.toString(),
+                            onClick = { amountText = value.toString() },
+                            label = { Text(value.toString()) },
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("teaspoon-quick-$value"),
+                        )
                     }
                 }
             }
@@ -258,16 +315,6 @@ internal fun ComplementaryFoodEditorSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("complementary-food-amount"),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ComplementaryFoodUnit.entries.forEach { option ->
-                    FilterChip(
-                        selected = unit == option,
-                        onClick = { unit = option },
-                        label = { Text(option.label) },
-                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("food-unit-${option.name.lowercase()}"),
-                    )
-                }
-            }
             DateTimeSelectionRows(date, time, { showDatePicker = true }, { showTimePicker = true })
             if (!validation.valid && validation.error != null && !validation.error.contains("količin", ignoreCase = true)) {
                 Text(validation.error, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("complementary-food-error"))
@@ -308,21 +355,72 @@ internal fun ComplementaryFoodEditorSheet(
     }
 }
 
-private val ComplementaryFoodUnit.label: String get() = if (this == ComplementaryFoodUnit.G) "g" else "ml"
-
 private fun foodMealCountLabel(count: Int): String = if (count == 1) "obrok dohrane" else "obroka dohrane"
 
 private fun foodTotalsText(
     totalG: Int,
     totalMl: Int,
+    totalTeaspoons: Int,
 ): String =
-    listOfNotNull(totalG.takeIf { it > 0 }?.let { "$it g" }, totalMl.takeIf { it > 0 }?.let { "$it ml" })
-        .joinToString(" · ")
-        .ifEmpty { "0 g" }
+    listOfNotNull(
+        totalG.takeIf { it > 0 }?.let { ComplementaryFoodLogic.formatQuantity(it, ComplementaryFoodUnit.G) },
+        totalMl.takeIf { it > 0 }?.let { ComplementaryFoodLogic.formatQuantity(it, ComplementaryFoodUnit.ML) },
+        totalTeaspoons
+            .takeIf { it > 0 }
+            ?.let { ComplementaryFoodLogic.formatQuantity(it, ComplementaryFoodUnit.TEASPOON) },
+    ).joinToString(" · ")
+        .ifEmpty { "0" }
 
 private fun warningText(warnings: Set<ComplementaryFoodWarning>): String =
     buildList {
         if (ComplementaryFoodWarning.ZERO in warnings) add("Količina je 0.")
         if (ComplementaryFoodWarning.OVER_500 in warnings) add("Količina je veća od 500.")
+        if (ComplementaryFoodWarning.OVER_30_TEASPOONS in warnings) {
+            add("Količina je veća od 30 žličica.")
+        }
         if (ComplementaryFoodWarning.POSSIBLE_DUPLICATE in warnings) add("Mogući duplikat: isti datum, vrijeme i namirnice već postoje.")
     }.joinToString("\n") + "\nŽelite li ipak spremiti ovaj unos?"
+
+@Composable
+private fun ComplementaryFoodUnitSelector(
+    selected: ComplementaryFoodUnit,
+    onSelected: (ComplementaryFoodUnit) -> Unit,
+) {
+    val options = ComplementaryFoodUnit.entries
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val useWrappedLayout = maxWidth < 310.dp || LocalDensity.current.fontScale > 1.35f
+        if (useWrappedLayout) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                options.forEach { option ->
+                    FilterChip(
+                        selected = selected == option,
+                        onClick = { onSelected(option) },
+                        label = { Text(ComplementaryFoodLogic.unitLabel(option), maxLines = 1) },
+                        modifier =
+                            Modifier
+                                .widthIn(min = 88.dp)
+                                .heightIn(min = 48.dp)
+                                .testTag("food-unit-${option.name.lowercase()}"),
+                    )
+                }
+            }
+        } else {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                options.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        selected = selected == option,
+                        onClick = { onSelected(option) },
+                        shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                        icon = {},
+                        label = { Text(ComplementaryFoodLogic.unitLabel(option), maxLines = 1) },
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("food-unit-${option.name.lowercase()}"),
+                    )
+                }
+            }
+        }
+    }
+}
